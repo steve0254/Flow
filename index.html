@@ -894,7 +894,10 @@ function deleteNote(id){notes=notes.filter(n=>String(n.id)!==String(id));if(Stri
 
 /* ── CAPTURE ── */
 let capTag='TASK';
-function updateCapInfer(){\n  const text=document.getElementById('capInp').value;\n  if(!text.trim()){document.getElementById('capInfer').classList.remove('on');return;}\n  capTag=capTagForced||classify(text);
+function updateCapInfer(){
+  const text=document.getElementById('capInp').value;
+  if(!text.trim()){document.getElementById('capInfer').classList.remove('on');return;}
+  capTag=capTagForced||classify(text);
   document.getElementById('capInfer').classList.add('on');
   const itag=document.getElementById('capItag');itag.textContent=capTag;itag.className='cap-itag pill '+capTag;
   const ts=parseTime(text);document.getElementById('capInferText').textContent=ts?'⏰ '+ts.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
