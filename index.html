@@ -206,8 +206,8 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
 .det-panel{position:fixed;top:0;right:-500px;bottom:28px;width:460px;background:var(--bg2);border-left:1px solid var(--border);z-index:200;display:flex;flex-direction:column;transition:right .22s cubic-bezier(.25,.8,.25,1)}
 .det-panel.open{right:0}
 .det-top{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
-.det-close{width:26px;height:26px;border-radius:50%;border:1px solid var(--border2);background:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;color:var(--ink2);transition:all .12s}
-.det-close:hover{border-color:var(--border3);color:var(--ink)}
+.det-close{width:44px;height:44px;border-radius:12px;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;color:var(--ink);transition:all .12s;flex-shrink:0}
+.det-close:hover,.det-close:active{background:var(--bg4);border-color:var(--border3)}
 .det-type{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);flex:1;font-family:var(--mono)}
 .det-scroll{flex:1;overflow-y:auto}
 .det-scroll::-webkit-scrollbar{display:none}
@@ -544,6 +544,8 @@ function loadDB(){try{return JSON.parse(localStorage.getItem('flow_v5')||'null')
 function saveDB(){
   localStorage.setItem('flow_v5',JSON.stringify({shelves,items,notes,updatedAt:Date.now()}));
   scheduleSyncPush();
+  // Re-sync alarms to SW whenever data changes
+  if(typeof syncAlarmsToSW==='function') syncAlarmsToSW();
 }
 const raw=loadDB();
 let shelves=raw&&raw.shelves?raw.shelves:[];
@@ -647,19 +649,136 @@ function inferShelf(text){
 /* ── TOAST ── */
 function toast(tag,text){const w=document.getElementById('toastWrap');if(!w)return;const e=document.createElement('div');e.className='toast';e.innerHTML=`<span class="t-lbl">${esc(tag)}</span><span>${esc(String(text).slice(0,55))}</span><span class="t-x" onclick="this.parentElement.remove()">×</span>`;w.appendChild(e);setTimeout(()=>{if(e.parentNode){e.style.opacity='0';setTimeout(()=>e.remove(),200);}},2800);}
 
-/* ── REMINDERS ── */
-function reqNotif(){if('Notification'in window&&Notification.permission==='default')Notification.requestPermission();}
+/* ── REMINDERS + SW ALARM ENGINE ── */
+async function reqNotif(){
+  if(!('Notification'in window))return false;
+  if(Notification.permission==='granted')return true;
+  if(Notification.permission==='denied')return false;
+  const res=await Notification.requestPermission();
+  return res==='granted';
+}
+
+// Show in-app banner (when app is open and SW sends message back)
+function showRemBadge(item){
+  document.querySelectorAll('.rem-badge').forEach(e=>e.remove());
+  const el=document.createElement('div');el.className='rem-badge';
+  el.innerHTML=`<div class="rem-badge-lbl">⏰ Reminder</div>
+    <div class="rem-badge-txt">${esc(item.text)}</div>
+    <div class="rem-badge-btns">
+      <button class="rem-badge-focus" onclick="startFocusItem('${item.id}');this.closest('.rem-badge').remove()">→ Focus</button>
+      <button class="rem-badge-x" onclick="this.closest('.rem-badge').remove()">Dismiss</button>
+    </div>`;
+  document.body.appendChild(el);
+  // Also buzz if possible
+  if('vibrate'in navigator)navigator.vibrate([300,100,300,100,300]);
+  setTimeout(()=>{if(el.parentNode)el.remove();},15000);
+}
+
+// Build alarm list from all items and send to SW
+async function syncAlarmsToSW(){
+  if(!navigator.serviceWorker||!navigator.serviceWorker.controller)return;
+  const now=Date.now();
+  // Collect all future reminders — items + steps
+  const alarms=[];
+  items.forEach(it=>{
+    if(it.reminderAt&&it.reminderAt>now-5000&&!it.done){
+      alarms.push({id:'item-'+it.id,itemId:it.id,title:it.text,body:it.shelfId?(shelfById(it.shelfId)||{name:''}).name:'',fireAt:it.reminderAt});
+    }
+    (it.steps||[]).forEach(s=>{
+      if(s.reminderAt&&s.reminderAt>now-5000&&!s.done){
+        alarms.push({id:'step-'+s.id,itemId:it.id,title:s.text,body:it.text,fireAt:s.reminderAt});
+      }
+    });
+  });
+  navigator.serviceWorker.controller.postMessage({type:'SET_ALARMS',alarms});
+}
+
+// Called when item reminder is added/updated
 function schedRem(item){
-  if(!item.reminderAt)return;const delay=item.reminderAt-Date.now();if(delay<=0)return;
+  // Always sync everything to SW — cleaner than one-at-a-time
+  syncAlarmsToSW();
+  // Fallback setTimeout for when app is in foreground
+  if(!item.reminderAt)return;
+  const delay=item.reminderAt-Date.now();
+  if(delay<=0||delay>3600000*12)return; // only within 12h
   setTimeout(()=>{
-    if('Notification'in window&&Notification.permission==='granted')new Notification('Flow ⏰',{body:item.text,icon:'./icons/icon-192.png'});
-    document.querySelectorAll('.rem-badge').forEach(e=>e.remove());
-    const el=document.createElement('div');el.className='rem-badge';
-    el.innerHTML=`<div class="rem-badge-lbl">⏰ Reminder</div><div class="rem-badge-txt">${esc(item.text)}</div><div class="rem-badge-btns"><button class="rem-badge-focus" onclick="startFocusItem('${item.id}');this.closest('.rem-badge').remove()">→ Focus</button><button class="rem-badge-x" onclick="this.closest('.rem-badge').remove()">Dismiss</button></div>`;
-    document.body.appendChild(el);setTimeout(()=>{if(el.parentNode)el.remove();},12000);
+    // Only show in-app banner, SW handles notification
+    showRemBadge(item);
   },delay);
 }
-function schedAll(){items.forEach(schedRem);}
+function schedAll(){
+  syncAlarmsToSW();
+  // Fallback for items due within 12h
+  items.forEach(it=>{
+    if(it.reminderAt&&!it.done){
+      const delay=it.reminderAt-Date.now();
+      if(delay>0&&delay<3600000*12)setTimeout(()=>showRemBadge(it),delay);
+    }
+  });
+}
+
+// Listen for messages from SW (notification clicked → focus item)
+if('serviceWorker'in navigator){
+  navigator.serviceWorker.addEventListener('message',e=>{
+    const{type,itemId}=e.data||{};
+    if(type==='FOCUS_ITEM'&&itemId){
+      startFocusItem(itemId);toast('◉','Alarm → focusing');
+    }
+  });
+}
+
+// Handle URL params on load
+(function handleParams(){
+  const p=new URLSearchParams(location.search);
+
+  // ?focus=id — from notification tap
+  const fid=p.get('focus');
+  if(fid){
+    setTimeout(()=>startFocusItem(fid),500);
+    history.replaceState({},'',location.pathname);
+    return;
+  }
+
+  // ?action=capture — from home screen shortcut
+  if(p.get('action')==='capture'){
+    setTimeout(()=>openCap(),400);
+    history.replaceState({},'',location.pathname);
+    return;
+  }
+
+  // Share target — from Android share sheet
+  // WhatsApp, Twitter, any app that shares text
+  const shareText=p.get('share_text')||'';
+  const shareTitle=p.get('share_title')||'';
+  const shareUrl=p.get('share_url')||'';
+
+  if(shareText||shareTitle||shareUrl){
+    // Build a clean capture string
+    let captured='';
+    if(shareText) captured=shareText;
+    else if(shareTitle) captured=shareTitle;
+    if(shareUrl&&!captured.includes(shareUrl)) captured+=(captured?' — ':'')+shareUrl;
+
+    captured=captured.trim();
+    if(captured){
+      setTimeout(()=>{
+        // Auto-classify and save straight to inbox
+        const item=addItem(captured,null,null);
+        renderAll();
+        // Show confirmation toast + offer to open detail
+        const t=document.createElement('div');t.className='toast';
+        t.innerHTML=`<span class="t-lbl">${item?item.type:'◎'}</span><span>Captured from share</span><span class="t-x" onclick="this.parentElement.remove()">×</span>`;
+        document.getElementById('toastWrap').appendChild(t);
+        if(item){
+          // After 800ms open the detail panel so they can edit/assign shelf
+          setTimeout(()=>{openDetail(item.id);},800);
+        }
+        setTimeout(()=>{if(t.parentNode){t.style.opacity='0';setTimeout(()=>t.remove(),200);}},3000);
+      },600);
+    }
+    history.replaceState({},'',location.pathname);
+  }
+})();
 
 /* ── FOCUS ENGINE ── */
 function startFocusItem(id){
@@ -775,25 +894,7 @@ function deleteNote(id){notes=notes.filter(n=>String(n.id)!==String(id));if(Stri
 
 /* ── CAPTURE ── */
 let capTag='TASK';
-function openCap(){
-  reqNotif();
-  const ov=document.getElementById('capOverlay'),inp=document.getElementById('capInp');
-  ov.classList.add('on');setTimeout(()=>{ov.classList.add('vis');inp.focus();},10);
-  capTagForced=null;
-  const sel=document.getElementById('capShelfSel');
-  sel.innerHTML='<option value="">Inbox (no shelf)</option>'+shelves.map(s=>`<option value="${s.id}">${s.parentId?'  ↳ ':''} ${esc(s.icon)} ${esc(s.name)}</option>`).join('');
-  updateCapInfer();
-}
-function closeCap(){
-  const ov=document.getElementById('capOverlay');
-  ov.classList.remove('vis');setTimeout(()=>{ov.classList.remove('on');document.getElementById('capInp').value='';},150);
-  document.getElementById('capPicker').classList.remove('on');
-  document.getElementById('capInfer').classList.remove('on');
-}
-function updateCapInfer(){
-  const text=document.getElementById('capInp').value;
-  if(!text.trim()){document.getElementById('capInfer').classList.remove('on');return;}
-  capTag=capTagForced||classify(text);
+function updateCapInfer(){\n  const text=document.getElementById('capInp').value;\n  if(!text.trim()){document.getElementById('capInfer').classList.remove('on');return;}\n  capTag=capTagForced||classify(text);
   document.getElementById('capInfer').classList.add('on');
   const itag=document.getElementById('capItag');itag.textContent=capTag;itag.className='cap-itag pill '+capTag;
   const ts=parseTime(text);document.getElementById('capInferText').textContent=ts?'⏰ '+ts.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
@@ -815,9 +916,87 @@ function saveBulk(){
   toast('◎',lines.length+' items captured');renderAll();
 }
 
-/* ── DETAIL PANEL ── */
-function openDetail(id){if(!id)return;detItemId=String(id);renderDetail();document.getElementById('detPanel').classList.add('open');}
-function closeDetail(){document.getElementById('detPanel').classList.remove('open');detItemId=null;expandedSteps.clear();}
+/* ── ANDROID BACK BUTTON ── */
+// Push a state whenever we open something so back button closes it instead of quitting
+function pushState(name){
+  history.pushState({modal:name},'',(location.pathname+location.search).replace(/[?#].*$/,''));
+}
+function openDetail(id){
+  if(!id)return;
+  detItemId=String(id);
+  renderDetail();
+  document.getElementById('detPanel').classList.add('open');
+  pushState('detail');
+}
+function closeDetail(){
+  document.getElementById('detPanel').classList.remove('open');
+  detItemId=null;
+  expandedSteps.clear();
+  // Don't call history.back() here — popstate handles it
+}
+function openCap(){
+  reqNotif();
+  const ov=document.getElementById('capOverlay'),inp=document.getElementById('capInp');
+  ov.classList.add('on');setTimeout(()=>{ov.classList.add('vis');inp.focus();},10);
+  capTagForced=null;
+  const sel=document.getElementById('capShelfSel');
+  sel.innerHTML='<option value="">Inbox (no shelf)</option>'+shelves.map(s=>`<option value="${s.id}">${s.parentId?'  ↳ ':''} ${esc(s.icon)} ${esc(s.name)}</option>`).join('');
+  updateCapInfer();
+  pushState('capture');
+}
+function closeCap(){
+  const ov=document.getElementById('capOverlay');
+  ov.classList.remove('vis');
+  setTimeout(()=>{ov.classList.remove('on');document.getElementById('capInp').value='';},150);
+  document.getElementById('capPicker').classList.remove('on');
+  document.getElementById('capInfer').classList.remove('on');
+}
+function openShelf(id){
+  currentShelfId=id;
+  showScreen('shelves');
+  renderShelves();
+  pushState('shelf-'+id);
+}
+
+// Handle back button / swipe back
+window.addEventListener('popstate',e=>{
+  const state=e.state&&e.state.modal;
+  // Close whatever is open, in priority order
+  if(document.getElementById('detPanel').classList.contains('open')){
+    document.getElementById('detPanel').classList.remove('open');
+    detItemId=null;expandedSteps.clear();
+    return;
+  }
+  if(document.getElementById('capOverlay').classList.contains('on')){
+    closeCap();return;
+  }
+  if(document.getElementById('shelfModal').classList.contains('on')){
+    closeShelfModal();return;
+  }
+  if(document.getElementById('syncModal').classList.contains('on')){
+    syncCloseModal();return;
+  }
+  // If in a shelf, go back to shelf root
+  if(activeScreen==='shelves'&&currentShelfId){
+    const sh=shelfById(currentShelfId);
+    if(sh&&sh.parentId){
+      currentShelfId=sh.parentId;
+    } else {
+      currentShelfId=null;
+    }
+    renderShelves();
+    pushState('shelves'); // keep a state so next back doesn't quit
+    return;
+  }
+  // If in a non-inbox screen, go back to inbox
+  if(activeScreen!=='inbox'){
+    showScreen('inbox');
+    pushState('inbox');
+    return;
+  }
+  // Already at inbox root — let the app stay open, push a dummy state
+  history.pushState({modal:'root'},'',location.pathname);
+});
 function renderDetail(){
   const it=itemById(detItemId);if(!it)return;
   const sh=shelfById(it.shelfId);
@@ -994,7 +1173,6 @@ function renderShelvesTree(){
   });
   el.innerHTML=h;
 }
-function openShelf(id){currentShelfId=id;showScreen('shelves');renderShelves();}
 function renderShelves(){
   renderShelvesTree();
   if(!currentShelfId){
@@ -1219,8 +1397,41 @@ function syncSchedule(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>{syncPu
 function scheduleSyncPush(){if(syncBinId)setTimeout(syncPush,1500);}
 
 /* ── BOOT ── */
-schedAll();renderAll();
-setInterval(()=>{if(activeScreen==='inbox')renderInbox();},60000);
+// Push initial state so first back press doesn't quit the app
+history.replaceState({modal:'root'},'',location.pathname);
+renderAll();
+
+// Request notification permission and set up SW alarms
+(async function boot(){
+  const granted = await reqNotif();
+  if('serviceWorker' in navigator){
+    const reg = await navigator.serviceWorker.ready;
+    // Periodic sync — wakes SW every ~15min even when closed
+    if('periodicSync' in reg){
+      try{
+        const status = await navigator.permissions.query({name:'periodic-background-sync'});
+        if(status.state==='granted'){
+          await reg.periodicSync.register('flow-alarms',{minInterval:15*60*1000});
+        }
+      }catch(e){}
+    }
+    // Background sync — fires on device wake / coming online
+    if('sync' in reg){
+      try{await reg.sync.register('check-alarms');}catch(e){}
+    }
+    // Push all current alarms to SW
+    await syncAlarmsToSW();
+    if(!granted) toast('⏰','Enable notifications so alarms work when screen is off');
+  }
+  // Poll every minute — keeps SW ticking, refreshes inbox
+  setInterval(async()=>{
+    if(activeScreen==='inbox') renderInbox();
+    if(navigator.serviceWorker && navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage({type:'CHECK_ALARMS'});
+    }
+  }, 60000);
+})();
+
 if(syncBinId){syncSetStatus('ing','connecting…');syncPush().then(()=>syncSchedule());}
 else syncSetStatus('','offline · local only');
 </script>
