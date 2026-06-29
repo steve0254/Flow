@@ -345,7 +345,7 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
   .sidebar{display:none}
   .main{height:calc(100% - 56px)}
   .main-topbar{padding:0 16px;height:50px}
-  .m-bnav{display:flex !important}
+  
   .inbox-split{grid-template-columns:1fr}
   .inbox-side{display:none}
   .inbox-main{padding:18px}
@@ -361,14 +361,22 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
   .notes-list{display:none}
   .det-panel{width:100%;right:-100%;bottom:56px}
   .det-panel.open{right:0}
-  .m-bnav{display:flex !important}
+  
   .sync-bar{display:none}
   .app{padding-bottom:0}
 }
-.m-bnav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:300;height:56px}
-.m-bn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-family:var(--mono);border:none;background:none;cursor:pointer;gap:3px;transition:color .12s;min-height:56px;-webkit-tap-highlight-color:rgba(200,245,154,.1)}
+@media(max-width:700px){}
+
+
+
+
+
+/* ── MOBILE NAV ── */
+.m-bnav{position:fixed;bottom:0;left:0;right:0;height:56px;background:var(--bg2);border-top:1px solid var(--border);z-index:9999;display:none}
+.m-bn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 0;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-family:var(--mono);border:none;background:none;cursor:pointer;gap:3px;min-height:56px;-webkit-tap-highlight-color:transparent;transition:color .12s}
 .m-bn.on{color:var(--accent)}
-.m-bn-ico{font-size:18px;line-height:1}
+.m-bn-ico{font-size:20px;line-height:1}
+@media(max-width:700px){.m-bnav{display:flex}}
 </style>
 </head>
 <body>
