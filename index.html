@@ -343,8 +343,9 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
 @media(max-width:700px){
   .app{flex-direction:column;padding-bottom:56px}
   .sidebar{display:none}
-  .main{height:100%}
+  .main{height:calc(100% - 56px)}
   .main-topbar{padding:0 16px;height:50px}
+  .m-bnav{display:flex !important}
   .inbox-split{grid-template-columns:1fr}
   .inbox-side{display:none}
   .inbox-main{padding:18px}
@@ -360,12 +361,14 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
   .notes-list{display:none}
   .det-panel{width:100%;right:-100%;bottom:56px}
   .det-panel.open{right:0}
-  .m-bnav{display:flex}
+  .m-bnav{display:flex !important}
+  .sync-bar{display:none}
+  .app{padding-bottom:0}
 }
-.m-bnav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:90}
-.m-bn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px 0;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-family:var(--mono);border:none;background:none;cursor:pointer;gap:3px;transition:color .12s}
+.m-bnav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:300;height:56px}
+.m-bn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-family:var(--mono);border:none;background:none;cursor:pointer;gap:3px;transition:color .12s;min-height:56px;-webkit-tap-highlight-color:rgba(200,245,154,.1)}
 .m-bn.on{color:var(--accent)}
-.m-bn-ico{font-size:15px}
+.m-bn-ico{font-size:18px;line-height:1}
 </style>
 </head>
 <body>
@@ -640,10 +643,71 @@ function classify(text){
 }
 function parseTime(text){
   const t=text.toLowerCase();
+  const now=new Date();
+
+  // "tomorrow [at time]"
+  if(/\btomorrow\b/.test(t)){
+    const d=new Date(now);d.setDate(d.getDate()+1);
+    const tm=/at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(t);
+    if(tm){let h=+tm[1],mn=+(tm[2]||0);if(tm[3]==='pm'&&h<12)h+=12;if(tm[3]==='am'&&h===12)h=0;d.setHours(h,mn,0,0);}
+    else{d.setHours(8,0,0,0);}
+    return d;
+  }
+
+  // "next week" / "next monday" etc
+  const days=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const nextDay=/next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.exec(t);
+  if(nextDay){
+    const target=days.indexOf(nextDay[1].toLowerCase());
+    const d=new Date(now);let diff=(target-d.getDay()+7)%7||7;
+    d.setDate(d.getDate()+diff);d.setHours(8,0,0,0);return d;
+  }
+  if(/next\s+week/.test(t)){const d=new Date(now);d.setDate(d.getDate()+7);d.setHours(8,0,0,0);return d;}
+  if(/next\s+month/.test(t)){const d=new Date(now);d.setMonth(d.getMonth()+1);d.setHours(8,0,0,0);return d;}
+
+  // "in X minutes/hours/days/weeks"
+  const inMatch=/\bin\s+(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(minute|hour|day|week|month)s?\b/i.exec(t);
+  if(inMatch){
+    const wordNums={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10};
+    const n=isNaN(+inMatch[1])?(wordNums[inMatch[1].toLowerCase()]||1):+inMatch[1];
+    const unit=inMatch[2].toLowerCase();
+    const d=new Date(now);
+    if(unit==='minute')d.setMinutes(d.getMinutes()+n);
+    else if(unit==='hour')d.setHours(d.getHours()+n);
+    else if(unit==='day')d.setDate(d.getDate()+n);
+    else if(unit==='week')d.setDate(d.getDate()+n*7);
+    else if(unit==='month')d.setMonth(d.getMonth()+n);
+    return d;
+  }
+
+  // "on monday/tuesday etc" (this week or next)
+  const onDay=/\bon\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.exec(t);
+  if(onDay){
+    const target=days.indexOf(onDay[1].toLowerCase());
+    const d=new Date(now);let diff=(target-d.getDay()+7)%7||7;
+    d.setDate(d.getDate()+diff);d.setHours(8,0,0,0);return d;
+  }
+
+  // "at 4:30pm" / "at 16:30" / "4pm" / "430pm"
   const m=/at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(t);
-  if(m){const d=new Date();let h=+m[1],mn=+(m[2]||0);if(m[3]==='pm'&&h<12)h+=12;if(m[3]==='am'&&h===12)h=0;d.setHours(h,mn,0,0);return d;}
+  if(m){const d=new Date(now);let h=+m[1],mn=+(m[2]||0);if(m[3]==='pm'&&h<12)h+=12;if(m[3]==='am'&&h===12)h=0;d.setHours(h,mn,0,0);return d;}
+
+  // bare "4pm" "430pm" "4:30pm"
+  const bare=/(\d{1,2})(?::(\d{2}))?(am|pm)/i.exec(t);
+  if(bare){const d=new Date(now);let h=+bare[1],mn=+(bare[2]||0);if(bare[3].toLowerCase()==='pm'&&h<12)h+=12;if(bare[3].toLowerCase()==='am'&&h===12)h=0;d.setHours(h,mn,0,0);return d;}
+
+  // 24h time "16:30"
   const m2=/\b(\d{1,2}):(\d{2})\b/.exec(t);
-  if(m2){const d=new Date();d.setHours(+m2[1],+m2[2],0,0);return d;}
+  if(m2){const d=new Date(now);d.setHours(+m2[1],+m2[2],0,0);return d;}
+
+  // "today"
+  if(/\btoday\b/.test(t)){const d=new Date(now);d.setHours(8,0,0,0);return d;}
+
+  // "this evening/morning/afternoon/night"
+  if(/this evening|tonight/.test(t)){const d=new Date(now);d.setHours(19,0,0,0);return d;}
+  if(/this morning/.test(t)){const d=new Date(now);d.setHours(7,0,0,0);return d;}
+  if(/this afternoon/.test(t)){const d=new Date(now);d.setHours(14,0,0,0);return d;}
+
   return null;
 }
 function inferShelf(text){
@@ -911,7 +975,16 @@ function updateCapInfer(){
   capTag=capTagForced||classify(text);
   document.getElementById('capInfer').classList.add('on');
   const itag=document.getElementById('capItag');itag.textContent=capTag;itag.className='cap-itag pill '+capTag;
-  const ts=parseTime(text);document.getElementById('capInferText').textContent=ts?'⏰ '+ts.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
+  const ts=parseTime(text);
+  if(ts){
+    const isToday=ts.toDateString()===new Date().toDateString();
+    const label=isToday
+      ? ts.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      : ts.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'})+' '+ts.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('capInferText').textContent='⏰ '+label;
+  } else {
+    document.getElementById('capInferText').textContent='';
+  }
   const inf=inferShelf(text),sel=document.getElementById('capShelfSel');if(inf&&!sel.value)sel.value=inf;
 }
 function toggleCapPicker(){document.getElementById('capPicker').classList.toggle('on');}
