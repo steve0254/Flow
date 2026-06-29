@@ -526,6 +526,7 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
   <div class="sync-dot" id="syncDot"></div>
   <span class="sync-bar-msg" id="syncMsg">offline · local only</span>
   <button class="sync-bar-btn" onclick="syncOpenModal()">⇅ Sync</button>
+  <button class="sync-bar-btn" onclick="hardReset()" style="color:var(--red)" title="Clear cache & reload">↺</button>
 </div>
 <div class="toast-wrap" id="toastWrap"></div>
 <div class="m-bnav">
@@ -537,7 +538,17 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
 </div>
 <script>
 'use strict';
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+// Force clear old broken SW caches then register fresh
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    // If any SW is using old cache name, unregister it
+    caches.keys().then(keys=>{
+      keys.filter(k=>k!=='flow-v3').forEach(k=>caches.delete(k));
+    });
+    // Register/update SW
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
 
 /* ── DATA MODEL ── */
 function loadDB(){try{return JSON.parse(localStorage.getItem('flow_v5')||'null');}catch(e){return null;}}
@@ -1398,6 +1409,17 @@ async function syncPush(){
 }
 function syncSchedule(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>{syncPush();syncSchedule();},120000);}
 function scheduleSyncPush(){if(syncBinId)setTimeout(syncPush,1500);}
+
+function hardReset(){
+  if(!confirm('Clear cache and reload?'))return;
+  caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>{
+    if(navigator.serviceWorker){
+      navigator.serviceWorker.getRegistrations().then(regs=>{
+        Promise.all(regs.map(r=>r.unregister())).then(()=>location.reload(true));
+      });
+    } else { location.reload(true); }
+  });
+}
 
 /* ── BOOT ── */
 // Push initial state so first back press doesn't quit the app
