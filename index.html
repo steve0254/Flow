@@ -223,7 +223,9 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
 .det-step-chk{font-size:11px;color:var(--ink3);flex-shrink:0;width:14px;margin-top:1px;font-family:var(--mono)}
 .det-step-chk.done{color:var(--accent)}
 .det-step-body{flex:1;min-width:0}
-.det-step-text{font-size:13px;color:var(--ink);line-height:1.4}
+.det-step-text{font-size:13px;color:var(--ink);line-height:1.4;outline:none;border-radius:4px;padding:1px 3px;margin:-1px -3px}
+.det-step-text:focus{background:var(--bg4)}
+.det-step-text:hover{background:var(--bg3)}
 .det-step-text.done{text-decoration:line-through;color:var(--ink3)}
 .det-step-sub{display:flex;gap:7px;margin-top:3px;align-items:center;flex-wrap:wrap}
 .det-step-note{font-size:10px;color:var(--ink3);font-style:italic}
@@ -357,8 +359,8 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
   .focus-right{width:100%;max-height:180px;border-left:none;border-top:1px solid var(--border)}
   .focus-left{padding:22px 16px}
   .focus-timer-big{font-size:38px}
-  .notes-wrap{grid-template-columns:1fr}
-  .notes-list{display:none}
+  .notes-wrap{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .notes-list{display:block;max-height:160px;border-right:none;border-bottom:1px solid var(--border)}
   .det-panel{width:100%;right:-100%;bottom:56px}
   .det-panel.open{right:0}
   
@@ -404,6 +406,8 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
     <div class="main-topbar">
       <div class="main-topbar-title" id="mainTitle">Inbox</div>
       <div class="topbar-right">
+        <input type="text" id="searchInp" placeholder="search..." style="background:var(--bg3);border:1px solid var(--border2);outline:none;font-family:var(--mono);font-size:11px;color:var(--ink);padding:5px 10px;border-radius:var(--r);width:120px;transition:width .15s,border-color .15s" 
+          oninput="doSearch(this.value)" onfocus="this.style.width='200px'" onblur="if(!this.value)this.style.width='120px'"/>
         <span class="topbar-clock" id="topClock"></span>
         <button class="topbar-btn" onclick="openCap()">+ Capture</button>
       </div>
@@ -411,6 +415,7 @@ html,body{height:100%;width:100%;font-family:var(--sans);background:var(--bg);ov
     <div class="screen on" id="screen-inbox">
       <div class="inbox-split">
         <div class="inbox-main">
+          <div id="searchResults"></div>
           <div id="resurfArea"></div>
           <div class="section-label">quick capture</div>
           <textarea class="bulk-input" id="bulkInp" placeholder="one line per item&#10;wake up at 4:30am&#10;ugali wraps business idea&#10;call mom tomorrow"></textarea>
@@ -583,7 +588,7 @@ if(!raw){
         createdAt:i.createdAt||Date.now(),updatedAt:i.updatedAt||Date.now(),
         scheduledAt:i.reminderAt||null,reminderAt:i.reminderAt||null,duration:null,
         notes:i.notes||'',steps:(i.steps||[]).map((s,x)=>({id:Date.now()+x,text:typeof s==='string'?s:s.text||'',done:s.done||false,note:'',scheduledAt:null,reminderAt:null})),
-        status:'raw',focusHistory:[]}));
+        status:'raw',focusHistory:[],repeat:null,lastResetAt:null}));
       saveDB();
     }
   }catch(e){}
@@ -603,15 +608,15 @@ if(!shelves.length&&!items.length){
     {id:'s-lessons',name:'Lessons',icon:'🎓',parentId:'s-notes',order:1,createdAt:N},
   ];
   items=[
-    {id:'i1',text:'Wake up',type:'REMINDER',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(4,30),reminderAt:h(4,30),duration:null,notes:'',steps:[],status:'raw',focusHistory:[]},
-    {id:'i2',text:'Pray',type:'REMINDER',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(5,0),reminderAt:h(5,30),duration:30,notes:'',steps:[{id:'s1',text:'Read Psalm',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s2',text:'Pray for family',done:false,note:'Stay focused',scheduledAt:null,reminderAt:null}],status:'raw',focusHistory:[]},
-    {id:'i3',text:'Cold shower & dress',type:'TASK',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(5,30),reminderAt:null,duration:15,notes:'',steps:[],status:'raw',focusHistory:[]},
-    {id:'i4',text:'Review day plan',type:'TASK',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(6,0),reminderAt:null,duration:15,notes:'Open Flow, check shelves and today\'s priorities',steps:[],status:'raw',focusHistory:[]},
-    {id:'i5',text:'Ugali Wraps',type:'IDEA',shelfId:'s-product',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'Street food concept — ugali wrapped around filling. Target Nairobi CBD & Westlands. Research prep costs and packaging.',steps:[{id:'s3',text:'Visit 3 similar spots in CBD',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s4',text:'Build cost model: ugali + filling + packaging',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s5',text:'Talk to mama mboga suppliers',done:false,note:'',scheduledAt:null,reminderAt:null}],status:'exploring',focusHistory:[]},
-    {id:'i6',text:'Flow physical notebook',type:'IDEA',shelfId:'s-product',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'A5 notebook built around Flow method. Sections: Capture, Queue, Shelves. DM Serif on cover.',steps:[],status:'raw',focusHistory:[]},
-    {id:'i7',text:'Pranking my GF TikTok',type:'IDEA',shelfId:'s-tiktok',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'Series of harmless pranks. First: fake taxi booking gone wrong.',steps:[{id:'s6',text:'Film the setup',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s7',text:'Edit with captions',done:false,note:'Keep under 60s',scheduledAt:null,reminderAt:null}],status:'raw',focusHistory:[]},
-    {id:'i8',text:'Leftovers transformation videos',type:'IDEA',shelfId:'s-tiktok',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'Fridge → finished meal. Fast cuts. No talking, just cooking sounds.',steps:[],status:'raw',focusHistory:[]},
-    {id:'i9',text:'check whatsapp — what did Aisha say about the venue?',type:'TASK',shelfId:null,done:false,createdAt:N-172800000,updatedAt:N-172800000,scheduledAt:null,reminderAt:null,duration:null,notes:'',steps:[],status:'raw',focusHistory:[]},
+    {id:'i1',text:'Wake up',type:'REMINDER',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(4,30),reminderAt:h(4,30),duration:null,notes:'',steps:[],status:'raw',focusHistory:[],repeat:'daily',lastResetAt:N},
+    {id:'i2',text:'Pray',type:'REMINDER',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(5,0),reminderAt:h(5,30),duration:30,notes:'',steps:[{id:'s1',text:'Read Psalm',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s2',text:'Pray for family',done:false,note:'Stay focused',scheduledAt:null,reminderAt:null}],status:'raw',focusHistory:[],repeat:'daily',lastResetAt:N},
+    {id:'i3',text:'Cold shower & dress',type:'TASK',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(5,30),reminderAt:null,duration:15,notes:'',steps:[],status:'raw',focusHistory:[],repeat:'daily',lastResetAt:N},
+    {id:'i4',text:'Review day plan',type:'TASK',shelfId:'s-mr',done:false,createdAt:N,updatedAt:N,scheduledAt:h(6,0),reminderAt:null,duration:15,notes:'Open Flow, check shelves and today\'s priorities',steps:[],status:'raw',focusHistory:[],repeat:'daily',lastResetAt:N},
+    {id:'i5',text:'Ugali Wraps',type:'IDEA',shelfId:'s-product',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'Street food concept — ugali wrapped around filling. Target Nairobi CBD & Westlands. Research prep costs and packaging.',steps:[{id:'s3',text:'Visit 3 similar spots in CBD',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s4',text:'Build cost model: ugali + filling + packaging',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s5',text:'Talk to mama mboga suppliers',done:false,note:'',scheduledAt:null,reminderAt:null}],status:'exploring',focusHistory:[],repeat:null,lastResetAt:null},
+    {id:'i6',text:'Flow physical notebook',type:'IDEA',shelfId:'s-product',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'A5 notebook built around Flow method. Sections: Capture, Queue, Shelves. DM Serif on cover.',steps:[],status:'raw',focusHistory:[],repeat:null,lastResetAt:null},
+    {id:'i7',text:'Pranking my GF TikTok',type:'IDEA',shelfId:'s-tiktok',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'Series of harmless pranks. First: fake taxi booking gone wrong.',steps:[{id:'s6',text:'Film the setup',done:false,note:'',scheduledAt:null,reminderAt:null},{id:'s7',text:'Edit with captions',done:false,note:'Keep under 60s',scheduledAt:null,reminderAt:null}],status:'raw',focusHistory:[],repeat:null,lastResetAt:null},
+    {id:'i8',text:'Leftovers transformation videos',type:'IDEA',shelfId:'s-tiktok',done:false,createdAt:N,updatedAt:N,scheduledAt:null,reminderAt:null,duration:null,notes:'Fridge → finished meal. Fast cuts. No talking, just cooking sounds.',steps:[],status:'raw',focusHistory:[],repeat:null,lastResetAt:null},
+    {id:'i9',text:'check whatsapp — what did Aisha say about the venue?',type:'TASK',shelfId:null,done:false,createdAt:N-172800000,updatedAt:N-172800000,scheduledAt:null,reminderAt:null,duration:null,notes:'',steps:[],status:'raw',focusHistory:[],repeat:null,lastResetAt:null},
   ];
   notes=[{id:'n1',title:'Why I started Flow',body:'I kept losing ideas in WhatsApp messages to myself.\n\nReminders that fired when I was busy and then vanished. Tasks with no context.\n\nFlow is the OS for the space between thoughts and action.',shelfId:'s-journal',createdAt:N,updatedAt:N}];
   saveDB();
@@ -643,10 +648,14 @@ function shelfPath(id){const p=[];let c=shelfById(id);while(c){p.unshift(c);c=sh
 /* ── CLASSIFY ── */
 function classify(text){
   const t=text.toLowerCase();
-  if(/\b(idea|concept|what if|imagine|could we|maybe)\b/.test(t))return'IDEA';
-  if(/\bat\s+\d|wake|remind|alarm|\d+(am|pm)|\bpm\b|\bam\b/.test(t))return'REMINDER';
+  // Reminder signals checked first - explicit "remind me" always wins
+  if(/remind me|set a reminder|alarm for|wake( me)? (up )?at/.test(t))return'REMINDER';
+  // Idea signals - anywhere in the sentence, not just start
+  if(/\b(idea|concept|what if|imagine|could we|maybe i should|business idea|content idea)\b/.test(t))return'IDEA';
+  // Time-based reminders
+  if(/\bat\s+\d|\d{1,2}(:\d{2})?\s*(am|pm)\b|\bin\s+\d+\s*(min|hour)|tomorrow at|tonight/.test(t))return'REMINDER';
   if(/\b(project|plan|launch|build|start|create|design)\b/.test(t))return'PROJECT';
-  if(/\b(journal|diary|today i|lesson|learned|note:)\b/.test(t))return'NOTE';
+  if(/\b(journal|diary|today i|lesson|learned|note:|note to self)\b/.test(t))return'NOTE';
   return'TASK';
 }
 function parseTime(text){
@@ -789,7 +798,47 @@ function schedRem(item){
     showRemBadge(item);
   },delay);
 }
+function isSameDay(a,b){const da=new Date(a),db=new Date(b);return da.toDateString()===db.toDateString();}
+function isSameWeek(a,b){
+  const da=new Date(a),db=new Date(b);
+  const weekStart=d=>{const x=new Date(d);const day=x.getDay();x.setDate(x.getDate()-day);x.setHours(0,0,0,0);return x.getTime();};
+  return weekStart(da)===weekStart(db);
+}
+// Resets recurring items at the start of a new day/week
+function resetRecurring(){
+  const now=Date.now();
+  let changed=false;
+  items.forEach(it=>{
+    if(!it.repeat)return;
+    const lastReset=it.lastResetAt||it.createdAt;
+    let shouldReset=false;
+    if(it.repeat==='daily'&&!isSameDay(lastReset,now))shouldReset=true;
+    if(it.repeat==='weekly'&&!isSameWeek(lastReset,now))shouldReset=true;
+    if(it.repeat==='weekdays'&&!isSameDay(lastReset,now)){
+      const day=new Date(now).getDay();
+      if(day>=1&&day<=5)shouldReset=true;
+    }
+    if(shouldReset){
+      it.done=false;
+      it.lastResetAt=now;
+      // Roll forward scheduledAt/reminderAt to today's same time
+      if(it.scheduledAt){
+        const old=new Date(it.scheduledAt);
+        const next=new Date(now);
+        next.setHours(old.getHours(),old.getMinutes(),0,0);
+        it.scheduledAt=next.getTime();
+        it.reminderAt=it.reminderAt?next.getTime():null;
+      }
+      // Reset steps too
+      (it.steps||[]).forEach(s=>{s.done=false;});
+      changed=true;
+    }
+  });
+  if(changed){saveDB();}
+  return changed;
+}
 function schedAll(){
+  resetRecurring();
   syncAlarmsToSW();
   // Fallback for items due within 12h
   items.forEach(it=>{
@@ -907,11 +956,37 @@ function addItem(text,type,shelfId){
   text=(text||'').trim();if(!text)return null;
   const t=type||classify(text),ts=parseTime(text);
   const item={id:uid(),text,type:t,shelfId:shelfId||null,done:false,createdAt:Date.now(),updatedAt:Date.now(),
-    scheduledAt:ts?ts.getTime():null,reminderAt:ts?ts.getTime():null,duration:null,notes:'',steps:[],status:'raw',focusHistory:[]};
+    scheduledAt:ts?ts.getTime():null,reminderAt:ts?ts.getTime():null,duration:null,notes:'',steps:[],status:'raw',focusHistory:[],
+    repeat:null,lastResetAt:null};
   items.unshift(item);saveDB();schedRem(item);return item;
 }
 function toggleDone(id){const it=itemById(id);if(!it)return;it.done=!it.done;it.updatedAt=Date.now();saveDB();renderAll();}
-function deleteItem(id){items=items.filter(i=>String(i.id)!==String(id));if(focusId===id)stopFocus();saveDB();renderAll();closeDetail();toast('◎','Deleted');}
+let lastDeleted=null,lastDeletedTimer=null;
+function deleteItem(id){
+  const it=itemById(id);if(!it)return;
+  lastDeleted={item:it,index:items.indexOf(it)};
+  items=items.filter(i=>String(i.id)!==String(id));
+  if(focusId===id)stopFocus();
+  saveDB();renderAll();closeDetail();
+  showUndoToast(it.text);
+}
+function showUndoToast(text){
+  const w=document.getElementById('toastWrap');if(!w)return;
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const el=document.createElement('div');el.className='toast';
+  el.innerHTML=`<span class="t-lbl">◎</span><span>Deleted: ${esc(String(text).slice(0,30))}</span><span style="cursor:pointer;color:var(--accent);font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;margin-left:6px" onclick="undoDelete();this.closest('.toast').remove()">Undo</span>`;
+  w.appendChild(el);
+  clearTimeout(lastDeletedTimer);
+  lastDeletedTimer=setTimeout(()=>{if(el.parentNode){el.style.opacity='0';setTimeout(()=>el.remove(),200);}lastDeleted=null;},5000);
+}
+function undoDelete(){
+  if(!lastDeleted)return;
+  const{item,index}=lastDeleted;
+  items.splice(Math.min(index,items.length),0,item);
+  saveDB();renderAll();
+  toast('↩','Restored: '+item.text.slice(0,30));
+  lastDeleted=null;
+}
 function addStep(itemId,text){
   text=(text||'').trim();if(!text)return;
   const it=itemById(itemId);if(!it)return;
@@ -925,24 +1000,44 @@ function promoteToProject(id){
   const sh={id:uid(),name:it.text,icon:'🚀',parentId:null,order:shelves.length,createdAt:Date.now()};
   shelves.push(sh);
   it.type='PROJECT';it.shelfId=sh.id;it.updatedAt=Date.now();
-  it.steps.forEach(s=>{items.push({id:uid(),text:s.text,type:'TASK',shelfId:sh.id,done:s.done,createdAt:Date.now(),updatedAt:Date.now(),scheduledAt:s.scheduledAt,reminderAt:s.reminderAt,duration:null,notes:s.note||'',steps:[],status:'raw',focusHistory:[]});});
+  it.steps.forEach(s=>{items.push({id:uid(),text:s.text,type:'TASK',shelfId:sh.id,done:s.done,createdAt:Date.now(),updatedAt:Date.now(),scheduledAt:s.scheduledAt,reminderAt:s.reminderAt,duration:null,notes:s.note||'',steps:[],status:'raw',focusHistory:[],repeat:null,lastResetAt:null});});
   it.steps=[];
   saveDB();renderAll();currentShelfId=sh.id;showScreen('shelves');renderShelves();
   toast('🚀','Promoted: '+it.text.slice(0,30));
 }
 
 /* ── SHELVES CRUD ── */
+let shelfModalEditId=null;
 function openShelfModal(parentId){
+  shelfModalEditId=null;
   shelfModalParentId=parentId||null;selectedIco=parentId?'📝':'📁';
+  document.getElementById('shelfModalTitle').textContent='New shelf';
   document.getElementById('shelfModalName').value='';
   document.getElementById('shelfModalIcos').innerHTML=ICONS.map(i=>`<button class="modal-ico-btn${i===selectedIco?' on':''}" onclick="selectedIco='${i}';document.querySelectorAll('.modal-ico-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">${i}</button>`).join('');
   const sel=document.getElementById('shelfModalParent');
   sel.innerHTML='<option value="">None (root level)</option>'+shelves.filter(s=>!s.parentId).map(s=>`<option value="${s.id}"${parentId===s.id?' selected':''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('');
   if(parentId)sel.value=parentId;
+  document.querySelector('#shelfModal .modal-btn.primary').textContent='Create →';
+  document.querySelector('#shelfModal .modal-btn.primary').setAttribute('onclick','saveShelf()');
   document.getElementById('shelfModal').classList.add('on');
   setTimeout(()=>document.getElementById('shelfModalName').focus(),80);
 }
-function closeShelfModal(){document.getElementById('shelfModal').classList.remove('on');}
+function openShelfEditModal(id){
+  const sh=shelfById(id);if(!sh)return;
+  shelfModalEditId=id;
+  selectedIco=sh.icon;
+  document.getElementById('shelfModalTitle').textContent='Edit shelf';
+  document.getElementById('shelfModalName').value=sh.name;
+  document.getElementById('shelfModalIcos').innerHTML=ICONS.map(i=>`<button class="modal-ico-btn${i===selectedIco?' on':''}" onclick="selectedIco='${i}';document.querySelectorAll('.modal-ico-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">${i}</button>`).join('');
+  const sel=document.getElementById('shelfModalParent');
+  sel.innerHTML='<option value="">None (root level)</option>'+shelves.filter(s=>!s.parentId&&s.id!==id).map(s=>`<option value="${s.id}"${sh.parentId===s.id?' selected':''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('');
+  if(sh.parentId)sel.value=sh.parentId;
+  document.querySelector('#shelfModal .modal-btn.primary').textContent='Save →';
+  document.querySelector('#shelfModal .modal-btn.primary').setAttribute('onclick','saveShelfEdit()');
+  document.getElementById('shelfModal').classList.add('on');
+  setTimeout(()=>{const inp=document.getElementById('shelfModalName');inp.focus();inp.select();},80);
+}
+function closeShelfModal(){document.getElementById('shelfModal').classList.remove('on');shelfModalEditId=null;}
 function saveShelf(){
   const name=document.getElementById('shelfModalName').value.trim();
   if(!name){toast('!','Name required');return;}
@@ -951,6 +1046,22 @@ function saveShelf(){
   shelves.push(sh);saveDB();closeShelfModal();renderAll();
   currentShelfId=sh.id;showScreen('shelves');renderShelves();
   toast('◈','Created: '+name);
+}
+function saveShelfEdit(){
+  const sh=shelfById(shelfModalEditId);if(!sh)return;
+  const name=document.getElementById('shelfModalName').value.trim();
+  if(!name){toast('!','Name required');return;}
+  const parentId=document.getElementById('shelfModalParent').value||null;
+  // Prevent setting parent to itself or own descendant
+  function isDescendant(checkId,ofId){
+    if(checkId===ofId)return true;
+    const children=shelves.filter(s=>s.parentId===ofId);
+    return children.some(c=>isDescendant(checkId,c.id));
+  }
+  if(parentId&&isDescendant(parentId,sh.id)){toast('!','Cannot move into its own sub-shelf');return;}
+  sh.name=name;sh.icon=selectedIco;sh.parentId=parentId;
+  saveDB();closeShelfModal();renderAll();renderShelves();
+  toast('◈','Renamed: '+name);
 }
 function deleteShelf(id){
   if(!confirm('Delete shelf and all items inside?'))return;
@@ -1104,7 +1215,7 @@ function renderDetail(){
     stepsH+=`<div class="det-step" onclick="toggleStep('${it.id}','${s.id}');renderDetail()">
       <div class="det-step-chk ${s.done?'done':''}">${s.done?'■':'□'}</div>
       <div class="det-step-body">
-        <div class="det-step-text ${s.done?'done':''}">${esc(s.text)}</div>
+        <div class="det-step-text ${s.done?'done':''}" contenteditable="true" onclick="event.stopPropagation()" onblur="updateStepText('${it.id}','${s.id}',this.textContent)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${esc(s.text)}</div>
         <div class="det-step-sub">
           ${s.scheduledAt?`<span class="det-step-time">⏰ ${fmtTime(s.scheduledAt)}</span>`:''}
           ${s.note?`<span class="det-step-note">${esc(s.note.slice(0,40))}</span>`:''}
@@ -1124,7 +1235,7 @@ function renderDetail(){
   });
   document.getElementById('detScroll').innerHTML=`
     <div class="det-title-area">
-      <div class="det-title" contenteditable="true" onblur="updateItemTitle('${it.id}',this.textContent)">${esc(it.text)}</div>
+      <div class="det-title" contenteditable="true" onblur="updateItemTitle('${it.id}',this.textContent)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${esc(it.text)}</div>
       <div class="det-meta-row">
         <span class="pill ${it.type}">${it.type}</span>
         ${it.done?'<span class="pill done">done</span>':''}
@@ -1132,6 +1243,17 @@ function renderDetail(){
         <select style="background:none;border:none;outline:none;font-family:var(--mono);font-size:9px;color:var(--ink3);cursor:pointer"
           onchange="updateItemStatus('${it.id}',this.value)">${statusOpts}</select>
       </div>
+    </div>
+    <div class="det-section">
+      <div class="det-sec-label">Repeat</div>
+      <select style="background:var(--bg4);border:1px solid var(--border2);outline:none;font-family:var(--mono);font-size:11px;color:var(--ink);padding:7px 10px;border-radius:var(--r);width:100%;color-scheme:dark;cursor:pointer"
+        onchange="updateItemRepeat('${it.id}',this.value)">
+        <option value=""${!it.repeat?' selected':''}>Does not repeat</option>
+        <option value="daily"${it.repeat==='daily'?' selected':''}>Every day</option>
+        <option value="weekdays"${it.repeat==='weekdays'?' selected':''}>Weekdays only</option>
+        <option value="weekly"${it.repeat==='weekly'?' selected':''}>Every week</option>
+      </select>
+      ${it.repeat?'<div style="font-size:9px;color:var(--ink3);font-family:var(--mono);margin-top:6px">↻ resets automatically and rolls forward each cycle</div>':''}
     </div>
     <div class="det-section">
       <div class="det-sec-label">Schedule & Reminder</div>
@@ -1181,10 +1303,12 @@ function updateItemNotes(id,val){const it=itemById(id);if(it){it.notes=val;it.up
 function updateItemReminder(id,val){const it=itemById(id);if(!it)return;it.reminderAt=val?new Date(val).getTime():null;it.scheduledAt=it.reminderAt;it.updatedAt=Date.now();saveDB();if(it.reminderAt)schedRem(it);}
 function updateItemDuration(id,val){const it=itemById(id);if(it){it.duration=val?+val:null;it.updatedAt=Date.now();saveDB();}}
 function updateItemStatus(id,val){const it=itemById(id);if(it){it.status=val;it.updatedAt=Date.now();saveDB();}}
+function updateItemRepeat(id,val){const it=itemById(id);if(it){it.repeat=val||null;it.lastResetAt=Date.now();it.updatedAt=Date.now();saveDB();renderDetail();}}
 function moveItem(id,sid){const it=itemById(id);if(!it)return;it.shelfId=sid||null;it.updatedAt=Date.now();saveDB();renderAll();toast('◈','Moved to '+(sid?(shelfById(sid)||{name:'shelf'}).name:'Inbox'));}
 function updateStepNote(iid,sid,val){const it=itemById(iid);if(!it)return;const s=it.steps.find(s=>String(s.id)===String(sid));if(s){s.note=val;it.updatedAt=Date.now();saveDB();}}
 function updateStepTime(iid,sid,val){const it=itemById(iid);if(!it)return;const s=it.steps.find(s=>String(s.id)===String(sid));if(s){s.scheduledAt=val?new Date(val).getTime():null;s.reminderAt=s.scheduledAt;it.updatedAt=Date.now();saveDB();if(s.reminderAt)schedRem({id:s.id,text:s.text,reminderAt:s.reminderAt});}}
 function deleteStep(iid,sid){const it=itemById(iid);if(!it)return;it.steps=it.steps.filter(s=>String(s.id)!==String(sid));it.updatedAt=Date.now();saveDB();renderDetail();}
+function updateStepText(iid,sid,val){const it=itemById(iid);if(!it)return;const s=it.steps.find(s=>String(s.id)===String(sid));if(s&&val.trim()){s.text=val.trim();it.updatedAt=Date.now();saveDB();}}
 
 /* ── SIDEBAR ── */
 function renderSidebar(){
@@ -1287,7 +1411,7 @@ function renderShelves(){
       <span onclick="currentShelfId=null;renderShelves()">Shelves</span>
       ${path.map((p,i)=>`<span class="sep">/</span>${i<path.length-1?`<span onclick="openShelf('${p.id}')">${esc(p.name)}</span>`:''}`).join('')}
     </div>
-    <div class="shelf-title">${sh.icon} ${esc(sh.name)}</div>
+    <div class="shelf-title">${sh.icon} ${esc(sh.name)} <span style="font-size:13px;color:var(--ink3);cursor:pointer;font-family:var(--sans);vertical-align:middle" onclick="openShelfEditModal('${sh.id}')" title="Edit shelf">✎</span></div>
     <div class="shelf-meta"><span>${active.length} active</span>${done.length?`<span>${done.length} done</span>`:''}</div>
     <div class="shelf-toolbar">
       <button class="topbar-btn primary" onclick="startFocusShelf('${sh.id}')">◉ Run focus</button>
@@ -1307,6 +1431,7 @@ function renderShelves(){
         ${i.steps.length?`<span class="shelf-item-steps">${i.steps.filter(s=>s.done).length}/${i.steps.length} steps</span>`:''}
         ${i.duration?`<span class="shelf-item-time">${i.duration}min</span>`:''}
         ${i.status!=='raw'?`<span class="pill" style="background:var(--gold2);color:var(--gold)">${i.status}</span>`:''}
+        ${i.repeat?`<span style="font-size:9px;color:var(--ink3)" title="repeats ${i.repeat}">↻</span>`:''}
       </div>
     </div>
     <div class="shelf-item-actions">
@@ -1436,6 +1561,62 @@ function renderNotes(){
   else if(empty&&editor){editor.innerHTML='';editor.appendChild(empty);empty.style.display='flex';}
 }
 
+/* ── SEARCH ── */
+let searchActive=false;
+function doSearch(q){
+  q=q.trim().toLowerCase();
+  const resultsEl=document.getElementById('searchResults');
+  const bulkSection=document.getElementById('bulkInp').closest('div').parentElement; // not reliable, use class toggle instead
+  if(!q){
+    searchActive=false;
+    resultsEl.innerHTML='';
+    document.querySelectorAll('.inbox-main > *').forEach(el=>{if(el.id!=='searchResults')el.style.display='';});
+    return;
+  }
+  searchActive=true;
+  document.querySelectorAll('.inbox-main > *').forEach(el=>{if(el.id!=='searchResults')el.style.display='none';});
+
+  const matchedItems=items.filter(i=>i.text.toLowerCase().includes(q)||(i.notes||'').toLowerCase().includes(q)||i.steps.some(s=>s.text.toLowerCase().includes(q)));
+  const matchedNotes=notes.filter(n=>n.title.toLowerCase().includes(q)||n.body.toLowerCase().includes(q));
+  const matchedShelves=shelves.filter(s=>s.name.toLowerCase().includes(q));
+  const total=matchedItems.length+matchedNotes.length+matchedShelves.length;
+
+  let h='<div class="section-label">'+total+' results for "'+esc(q)+'"</div>';
+
+  if(matchedShelves.length){
+    h+='<div class="section-label" style="margin-top:16px">Shelves</div>';
+    h+=matchedShelves.map(s=>`<div class="inbox-item" onclick="clearSearchAndGo(()=>openShelf('${s.id}'))">
+      <div class="inbox-dot" style="background:var(--blue)"></div>
+      <div class="inbox-body"><div class="inbox-text">${s.icon} ${esc(s.name)}</div></div>
+    </div>`).join('');
+  }
+  if(matchedItems.length){
+    h+='<div class="section-label" style="margin-top:16px">Items</div>';
+    h+=matchedItems.map(i=>`<div class="inbox-item" onclick="clearSearchAndGo(()=>openDetail('${i.id}'))">
+      <div class="inbox-dot" style="background:${typeColor(i.type)}"></div>
+      <div class="inbox-body">
+        <div class="inbox-text">${esc(i.text)}</div>
+        <div class="inbox-meta"><span class="pill ${i.type}">${i.type}</span><span class="inbox-age">${i.shelfId?esc((shelfById(i.shelfId)||{name:''}).name):'Inbox'}</span></div>
+      </div>
+    </div>`).join('');
+  }
+  if(matchedNotes.length){
+    h+='<div class="section-label" style="margin-top:16px">Notes</div>';
+    h+=matchedNotes.map(n=>`<div class="inbox-item" onclick="clearSearchAndGo(()=>{showScreen('notes');currentNoteId='${n.id}';renderNotes();})">
+      <div class="inbox-dot" style="background:var(--gold)"></div>
+      <div class="inbox-body"><div class="inbox-text">${esc(n.title)||'Untitled'}</div><div class="inbox-meta"><span class="inbox-age">${esc(n.body.slice(0,50))}</span></div></div>
+    </div>`).join('');
+  }
+  if(!total) h+='<div style="padding:30px 0;text-align:center;color:var(--ink3);font-size:12px">No results</div>';
+
+  resultsEl.innerHTML=h;
+}
+function clearSearchAndGo(fn){
+  document.getElementById('searchInp').value='';
+  doSearch('');
+  fn();
+}
+
 /* ── SCREENS ── */
 function showScreen(name){
   activeScreen=name;
@@ -1529,14 +1710,22 @@ renderAll();
     await syncAlarmsToSW();
     if(!granted) toast('⏰','Enable notifications so alarms work when screen is off');
   }
-  // Poll every minute — keeps SW ticking, refreshes inbox
+  // Poll every minute — keeps SW ticking, refreshes inbox, checks for day rollover
   setInterval(async()=>{
+    if(resetRecurring()) renderAll();
     if(activeScreen==='inbox') renderInbox();
     if(navigator.serviceWorker && navigator.serviceWorker.controller){
       navigator.serviceWorker.controller.postMessage({type:'CHECK_ALARMS'});
     }
   }, 60000);
 })();
+
+// Re-check recurring items whenever the app regains focus (phone unlocked, tab switched back)
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    if(resetRecurring())renderAll();
+  }
+});
 
 if(syncBinId){syncSetStatus('ing','connecting…');syncPush().then(()=>syncSchedule());}
 else syncSetStatus('','offline · local only');
