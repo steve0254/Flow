@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #0b0b0c; color: #f2efea; -webkit-font-smoothing: antialiased; }
+  input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+  * { -webkit-user-select: none; user-select: none; }
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(242,239,234,0.1); border-radius: 2px; }
+}
+
+@layer components {
+  .drag   { -webkit-app-region: drag; }
+  .nodrag { -webkit-app-region: no-drag; }
+
+  .pill {
+    @apply text-[8px] tracking-widest uppercase px-[7px] py-[2px] rounded font-mono font-medium;
+  }
+  .pill-TASK     { background: rgba(200,245,154,.12); color: #c8f59a; }
+  .pill-IDEA     { background: rgba(165,148,247,.12); color: #a594f7; }
+  .pill-PROJECT  { background: rgba(107,155,247,.12); color: #6b9bf7; }
+  .pill-REMINDER { background: rgba(232,101,74,.13);  color: #e8654a; }
+  .pill-NOTE     { background: rgba(163,158,150,.12); color: #a39e96; }
+  .pill-JOURNAL  { background: rgba(236,200,115,.12); color: #ecc873; }
+
+  .btn {
+    @apply nodrag text-[9px] tracking-[.1em] uppercase font-mono font-medium
+           border border-[rgba(242,239,234,.11)] px-3 py-1.5 rounded
+           text-ink-2 transition-all duration-150 cursor-pointer
+           hover:border-[rgba(242,239,234,.2)] hover:text-ink-1;
+  }
+  .btn-accent {
+    @apply btn bg-accent text-bg-1 border-accent hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply btn bg-bg-3 border-[rgba(242,239,234,.08)];
+  }
+
+  .input-base {
+    @apply bg-bg-4 border border-[rgba(242,239,234,.08)] rounded px-3 py-2
+           text-ink-1 text-sm placeholder-ink-3 outline-none
+           focus:border-[rgba(200,245,154,.4)] transition-colors nodrag;
+  }
+
+  .section-label {
+    @apply text-[9px] tracking-[.14em] uppercase text-ink-3 font-mono mb-2;
+  }
+
+  .item-row {
+    @apply flex items-start gap-2.5 py-2.5 border-b border-[rgba(242,239,234,.05)]
+           hover:bg-bg-3 transition-colors cursor-pointer px-2 rounded;
+  }
+}
