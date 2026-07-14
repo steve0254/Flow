@@ -2,21 +2,9 @@
 // Option C: junction table from day one, progress fields, JSON repeat rules
 // Migration-friendly: only ADD columns/tables, never remove
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 1
 
 export const MIGRATIONS: Record<number, string> = {
-  2: `
-    -- Duration & execution tracking (Phase 1: Intelligent Progress & Duration Tracking)
-    ALTER TABLE items ADD COLUMN duration_value        REAL;
-    ALTER TABLE items ADD COLUMN duration_unit         TEXT;      -- 'minutes'|'hours'|'days'|'weeks'|'months'
-    ALTER TABLE items ADD COLUMN exec_started_at        TEXT;      -- non-null while the duration clock is running
-    ALTER TABLE items ADD COLUMN exec_accumulated_ms     INTEGER NOT NULL DEFAULT 0;
-    ALTER TABLE items ADD COLUMN milestones             TEXT NOT NULL DEFAULT '[25,50,75]'; -- JSON array of percents
-    ALTER TABLE items ADD COLUMN milestones_fired        TEXT NOT NULL DEFAULT '[]';          -- JSON array of percents already notified this cycle
-    ALTER TABLE items ADD COLUMN notify_remaining_min    INTEGER;   -- e.g. notify with 10 minutes left
-    ALTER TABLE items ADD COLUMN remaining_fired         INTEGER NOT NULL DEFAULT 0;
-    ALTER TABLE items ADD COLUMN notify_style            TEXT NOT NULL DEFAULT 'push'; -- 'sound'|'vibration'|'silent'|'push'
-  `,
   1: `
     CREATE TABLE IF NOT EXISTS meta (
       key   TEXT PRIMARY KEY,
@@ -120,9 +108,6 @@ export const MIGRATIONS: Record<number, string> = {
 export type ItemType   = 'TASK' | 'IDEA' | 'PROJECT' | 'REMINDER' | 'NOTE' | 'JOURNAL'
 export type ItemStatus = 'raw' | 'exploring' | 'active' | 'parked' | 'done'
 
-export type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
-export type NotifyStyle  = 'sound' | 'vibration' | 'silent' | 'push'
-
 export interface RepeatRule {
   type: 'daily' | 'weekdays' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
   interval?: number   // for custom
@@ -145,16 +130,6 @@ export interface Item {
   progress_current: number | null
   progress_total:   number | null
   progress_unit:    string | null
-  // Duration & execution tracking
-  duration_value:      number | null
-  duration_unit:        DurationUnit | null
-  exec_started_at:      string | null   // set while the clock is running; null when paused/not started
-  exec_accumulated_ms:  number          // banked ms from previous run segments
-  milestones:           string          // JSON number[] of percents, e.g. "[25,50,75]"
-  milestones_fired:     string          // JSON number[] of percents already notified this cycle
-  notify_remaining_min: number | null
-  remaining_fired:      number          // 0 | 1
-  notify_style:         NotifyStyle
   is_focus:         number          // 0 | 1
   sort_order:       number
   created_at:       string

@@ -1,8 +1,4 @@
-# Flow — Deploy to GitHub Pages
-
-This app is a Vite + React project, so unlike a plain HTML file it needs a **build step**
-before it can run in a browser. The workflow below builds it automatically every time you
-push, so you never have to run a build command yourself.
+# Flow PWA — Deploy to GitHub Pages
 
 ## One-time setup (5 minutes)
 
@@ -13,29 +9,27 @@ push, so you never have to run a build command yourself.
 4. Click **Create repository**
 
 ### Step 2 — Push these files
-Open CMD/Terminal inside this project folder:
+
+Open CMD/Terminal inside this `flow-pwa` folder:
 
 ```bash
 git init
 git add .
-git commit -m "Flow"
+git commit -m "Flow PWA"
 git branch -M main
 git remote add origin https://github.com/YOUR_USERNAME/flow.git
 git push -u origin main
 ```
 (Replace YOUR_USERNAME with your GitHub username)
 
-### Step 3 — Enable GitHub Pages via Actions
-1. Go to your repo on GitHub → **Settings** → **Pages**
-2. Under "Build and deployment" → **Source**, select **GitHub Actions** (NOT "Deploy from a branch")
-3. That's it — no folder/branch to pick, the included workflow handles it
+### Step 3 — Enable GitHub Pages
+1. Go to your repo on GitHub
+2. Click **Settings** → scroll down to **Pages**
+3. Under "Source" select **Deploy from a branch**
+4. Branch: **main** / folder: **/ (root)**
+5. Click **Save**
 
-### Step 4 — Watch it build
-1. Go to the **Actions** tab in your repo
-2. You'll see a "Deploy to GitHub Pages" run kick off automatically (triggered by the push in Step 2)
-3. Wait for it to go green (~1–2 minutes)
-
-Your app is live at:
+Wait ~60 seconds. Your app is live at:
 **https://YOUR_USERNAME.github.io/flow**
 
 ---
@@ -45,34 +39,31 @@ Your app is live at:
 2. Go to `https://YOUR_USERNAME.github.io/flow`
 3. Tap the **three-dot menu** → **Add to Home Screen**
 4. Tap **Add** — Flow appears on your home screen
+5. Long-press the icon → you can also pin it to your notification shade
 
 ## Install on PC (Chrome/Edge)
 1. Open Chrome or Edge
 2. Go to `https://YOUR_USERNAME.github.io/flow`
-3. Look for the **install icon** in the address bar
+3. Look for the **install icon** in the address bar (looks like a monitor with a down arrow)
 4. Click it → **Install**
+5. Flow opens in its own window, appears in taskbar and Start Menu
 
 ---
 
 ## Updating the app
-Whenever you change anything in `src/`:
+Whenever you change `index.html`:
 ```bash
 git add .
 git commit -m "update"
 git push
 ```
-GitHub Actions rebuilds and redeploys automatically — check the **Actions** tab for progress.
-The live site updates within ~1–2 minutes of a green build.
+GitHub Pages updates in ~30 seconds. The app auto-refreshes on next launch.
 
 ---
 
-## Troubleshooting a blank page
-- **Blank page, no errors mentioned above:** open your browser's DevTools console (F12) on the
-  live URL and check for a red error. The most common cause is Pages still set to "Deploy from
-  a branch" instead of "GitHub Actions" (Step 3) — that serves the raw, unbuilt source instead
-  of the compiled app.
-- **404s for `/assets/...` files:** make sure you haven't reverted the `base: './'` setting in
-  `vite.config.ts` — it's what lets the built app find its own files when hosted in a
-  subfolder like `username.github.io/flow/`.
-- **Still stuck:** check the Actions tab — if the build step failed (red ✕), click into it to
-  read the error; nothing will deploy until the build succeeds.
+## Your sync key
+First time you open Flow:
+- Tap **⇅ Sync** at the bottom
+- Tap **Create New Key** on your first device
+- Copy the key, paste it on your second device → **Connect Key**
+- Done — both devices stay in sync automatically

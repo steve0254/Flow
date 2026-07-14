@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import { itemsDB, shelvesDB, stepsDB, notesDB, sessionsDB, prefsDB, reloadStore, seedIfEmpty, classify } from '../db/client'
-import type { Item, Shelf, Step, Note, ItemType, DurationUnit, NotifyStyle } from '../db/client'
-import { computeDurationProgress, parseMilestones, stringifyMilestones, fmtDurationValue } from '../lib/duration'
-import { fireNotification, onToast } from '../lib/notify'
+import type { Item, Shelf, Step, Note, ItemType } from '../db/client'
 
 export type Screen = 'home' | 'inbox' | 'shelves' | 'focus' | 'notes'
 
@@ -86,23 +84,6 @@ interface FlowStore {
   // shelf filter (shelves screen)
   shelfFilter:  'all' | 'active' | 'done'
   setShelfFilter: (f: 'all' | 'active' | 'done') => void
-
-  // duration & execution tracking
-  clockTick:        number
-  startClock:       () => () => void   // returns a cleanup fn
-  setDuration:      (id: string, value: number | null, unit: DurationUnit | null) => void
-  startExecution:   (id: string) => void
-  pauseExecution:   (id: string) => void
-  resumeExecution:  (id: string) => void
-  resetExecution:   (id: string) => void
-  setMilestones:    (id: string, milestones: number[]) => void
-  setNotifyRemaining: (id: string, minutes: number | null) => void
-  setNotifyStyle:   (id: string, style: NotifyStyle) => void
-  checkMilestones:  () => void
-
-  // in-app toasts (milestone / notification feed)
-  toasts:       { id: string; title: string; body: string }[]
-  dismissToast: (id: string) => void
 }
 
 const DEFAULT_DURATION = 25 * 60
@@ -307,90 +288,4 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
   // ── shelf display filter ──────────────────────────────────────────────────
   shelfFilter: 'all',
   setShelfFilter: f => set({ shelfFilter: f }),
-
-  // ── duration & execution tracking ───────────────────────────────────────────
-  clockTick: 0,
-
-  startClock() {
-    const id = setInterval(() => {
-      set(s => ({ clockTick: s.clockTick + 1 }))
-      get().checkMilestones()
-    }, 1000)
-    return () => clearInterval(id)
-  },
-
-  setDuration(id, value, unit) {
-    itemsDB.setDuration(id, value, unit)
-    get().load()
-  },
-
-  startExecution(id) { itemsDB.startExecution(id); get().load() },
-  pauseExecution(id) { itemsDB.pauseExecution(id); get().load() },
-  resumeExecution(id) { itemsDB.resumeExecution(id); get().load() },
-  resetExecution(id) { itemsDB.resetExecution(id); get().load() },
-
-  setMilestones(id, milestones) {
-    itemsDB.update(id, { milestones: stringifyMilestones(milestones) })
-    get().load()
-  },
-
-  setNotifyRemaining(id, minutes) {
-    itemsDB.update(id, { notify_remaining_min: minutes, remaining_fired: 0 })
-    get().load()
-  },
-
-  setNotifyStyle(id, style) {
-    itemsDB.update(id, { notify_style: style })
-    get().load()
-  },
-
-  checkMilestones() {
-    const running = itemsDB.getRunning()
-    if (!running.length) return
-    let changed = false
-    const now = Date.now()
-
-    for (const item of running) {
-      const progress = computeDurationProgress(item, now)
-      if (!progress.hasDuration) continue
-
-      const enabled = parseMilestones(item.milestones || '[]')
-      const fired   = new Set(parseMilestones(item.milestones_fired || '[]'))
-
-      for (const pct of enabled) {
-        if (progress.percent >= pct && !fired.has(pct)) {
-          fired.add(pct)
-          fireNotification(item.content, `${pct}% complete`, item.notify_style)
-          changed = true
-        }
-      }
-      if (fired.size !== parseMilestones(item.milestones_fired || '[]').length) {
-        itemsDB.update(item.id, { milestones_fired: stringifyMilestones([...fired]) })
-      }
-
-      if (item.notify_remaining_min && !item.remaining_fired) {
-        const remainingMin = progress.remainingMs / 60_000
-        if (remainingMin <= item.notify_remaining_min) {
-          fireNotification(item.content, `${item.notify_remaining_min} minutes remaining`, item.notify_style)
-          itemsDB.update(item.id, { remaining_fired: 1 })
-          changed = true
-        }
-      }
-
-      if (progress.isComplete && !fired.has(100)) {
-        fired.add(100)
-        fireNotification(item.content, `Time's up — ${fmtDurationValue(item.duration_value!, item.duration_unit!)} elapsed`, item.notify_style)
-        itemsDB.update(item.id, { milestones_fired: stringifyMilestones([...fired]) })
-        changed = true
-      }
-    }
-
-    if (changed) get().load()
-  },
-
-  // ── toasts ───────────────────────────────────────────────────────────────
-  toasts: [],
-  dismissToast(id) { set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })) },
 }))
-
-onToast(t => useFlowStore.setState(s => ({ toasts: [...s.toasts, t] })))

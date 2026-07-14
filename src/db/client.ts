@@ -2,8 +2,8 @@
 // Runs in-browser: persists to localStorage (web dev) or syncs via IPC (Electron)
 // Schema mirrors SQLite exactly so the Electron → SQLite upgrade is a straight port
 
-import type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule, DurationUnit, NotifyStyle } from './schema'
-export type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule, DurationUnit, NotifyStyle }
+import type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule } from './schema'
+export type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule }
 
 // ── uid + time ────────────────────────────────────────────────────────────────
 export const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -164,10 +164,6 @@ export const itemsDB = {
       scheduled_at:  ts ? ts.toISOString() : null,
       duration_min: null, repeat_rule: null, last_reset_at: null,
       progress_current: null, progress_total: null, progress_unit: null,
-      duration_value: null, duration_unit: null,
-      exec_started_at: null, exec_accumulated_ms: 0,
-      milestones: '[25,50,75]', milestones_fired: '[]',
-      notify_remaining_min: null, remaining_fired: 0, notify_style: 'push',
       is_focus: 0, sort_order: maxOrder + 1,
       created_at: now(), updated_at: now(),
     }
@@ -190,10 +186,7 @@ export const itemsDB = {
   markDone(id: string): void {
     const idx = S.items.findIndex(i => i.id === id)
     if (idx === -1) return
-    const it = S.items[idx]
-    let accumulated = it.exec_accumulated_ms ?? 0
-    if (it.exec_started_at) accumulated += Math.max(0, Date.now() - new Date(it.exec_started_at).getTime())
-    S.items[idx] = { ...it, done: 1, done_at: now(), is_focus: 0, updated_at: now(), exec_started_at: null, exec_accumulated_ms: accumulated }
+    S.items[idx] = { ...S.items[idx], done: 1, done_at: now(), is_focus: 0, updated_at: now() }
     save()
   },
 
@@ -253,35 +246,6 @@ export const itemsDB = {
     })
     if (changed) save()
     return changed
-  },
-
-  // ── duration execution ─────────────────────────────────────────────────────
-  setDuration(id: string, value: number | null, unit: Item['duration_unit']): void {
-    itemsDB.update(id, { duration_value: value, duration_unit: unit })
-  },
-
-  startExecution(id: string): void {
-    const it = itemsDB.getById(id); if (!it || it.exec_started_at) return
-    itemsDB.update(id, { exec_started_at: now(), exec_accumulated_ms: 0, milestones_fired: '[]', remaining_fired: 0 })
-  },
-
-  pauseExecution(id: string): void {
-    const it = itemsDB.getById(id); if (!it || !it.exec_started_at) return
-    const ran = Date.now() - new Date(it.exec_started_at).getTime()
-    itemsDB.update(id, { exec_started_at: null, exec_accumulated_ms: (it.exec_accumulated_ms ?? 0) + Math.max(0, ran) })
-  },
-
-  resumeExecution(id: string): void {
-    const it = itemsDB.getById(id); if (!it || it.exec_started_at) return
-    itemsDB.update(id, { exec_started_at: now() })
-  },
-
-  resetExecution(id: string): void {
-    itemsDB.update(id, { exec_started_at: null, exec_accumulated_ms: 0, milestones_fired: '[]', remaining_fired: 0 })
-  },
-
-  getRunning(): Item[] {
-    return S.items.filter(i => !!i.exec_started_at && !i.done)
   },
 
   reorder(ids: string[]): void {

@@ -1,7 +1,6 @@
 import { useFlowStore } from '../store/useFlowStore'
 import type { Item } from '../db/client'
 import { ago, fmtTime, typeColor } from '../lib/utils'
-import { computeDurationProgress, fmtDurationMs } from '../lib/duration'
 
 interface Props {
   item: Item
@@ -10,14 +9,11 @@ interface Props {
 }
 
 export default function ItemRow({ item, showShelfBadges, onFocus }: Props) {
-  const { openDetail, setFocus, markDone, shelves, clockTick } = useFlowStore()
-  void clockTick // re-render every second while any duration clock is running
+  const { openDetail, setFocus, markDone, shelves } = useFlowStore()
 
   const shelfBadges = showShelfBadges
     ? shelves.filter(s => item.shelf_ids?.includes(s.id))
     : []
-
-  const duration = computeDurationProgress(item)
 
   return (
     <div
@@ -56,15 +52,6 @@ export default function ItemRow({ item, showShelfBadges, onFocus }: Props) {
             </span>
           )}
 
-          {duration.hasDuration && !item.done && (
-            <span className={`text-[9px] font-mono flex items-center gap-1
-              ${duration.isRunning ? 'text-[#c8f59a]' : 'text-ink-3'}`}>
-              {duration.isRunning && <span className="w-1 h-1 rounded-full bg-[#c8f59a] animate-pulse" />}
-              {duration.isComplete ? 'Time up' : duration.isStarted ? `${fmtDurationMs(duration.remainingMs)} left` : 'Not started'}
-              {duration.isStarted && ` · ${Math.round(duration.percent)}%`}
-            </span>
-          )}
-
           {item.repeat_rule && (
             <span className="text-[9px] text-ink-3 font-mono">↻ {item.repeat_rule}</span>
           )}
@@ -77,16 +64,6 @@ export default function ItemRow({ item, showShelfBadges, onFocus }: Props) {
             </span>
           ))}
         </div>
-
-        {/* Duration progress bar */}
-        {duration.hasDuration && duration.isStarted && !item.done && (
-          <div className="mt-1.5 h-px bg-bg-4 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#c8f59a] transition-all"
-              style={{ width: `${duration.percent}%`, transitionDuration: duration.isRunning ? '1s' : '0.3s' }}
-            />
-          </div>
-        )}
 
         {/* Steps progress bar */}
         {item.steps && item.steps.length > 0 && (
