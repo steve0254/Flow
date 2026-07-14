@@ -3,6 +3,7 @@ import { useFlowStore } from '../store/useFlowStore'
 import { itemsDB, shelvesDB } from '../db/client'
 import type { Item, Step } from '../db/client'
 import { fmtTime, ICONS } from '../lib/utils'
+import DurationTracker from './DurationTracker'
 
 const TYPES = ['TASK','IDEA','PROJECT','REMINDER','NOTE','JOURNAL'] as const
 const STATUSES = ['raw','exploring','active','parked'] as const
@@ -125,6 +126,9 @@ export default function ItemDetail() {
               </div>
             </div>
           </div>
+
+          {/* Duration & execution tracking */}
+          <DurationTracker item={item} />
 
           {/* Progress (if set) */}
           {item.progress_total && (
