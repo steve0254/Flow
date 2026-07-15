@@ -23,13 +23,7 @@ contextBridge.exposeInMainWorld('flow', {
       return () => ipcRenderer.removeListener('db:refresh', handler)
     },
   },
-  notify: (title: string, body: string, style?: 'sound' | 'vibration' | 'silent' | 'push') =>
-    ipcRenderer.send('notify', { title, body, style: style ?? 'push' }),
-  onPulse: (cb: () => void) => {
-    const handler = () => cb()
-    ipcRenderer.on('flow:pulse', handler)
-    return () => ipcRenderer.removeListener('flow:pulse', handler)
-  },
+  notify: (title: string, body: string) => ipcRenderer.send('notify', { title, body }),
   openExternal: (url: string) => ipcRenderer.send('open:external', url),
   platform: process.platform,
   isElectron: true,

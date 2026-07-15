@@ -25,11 +25,6 @@ export default {
         alarmPulse: {
           '0%,100%': { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(232,101,74,0.4)' },
           '50%':     { transform: 'scale(1.04)', boxShadow: '0 0 0 16px rgba(232,101,74,0)' }
-        },
-        pulseFlash: {
-          '0%':   { opacity: 0 },
-          '30%':  { opacity: 1 },
-          '100%': { opacity: 0 },
         }
       },
       animation: {
@@ -37,7 +32,6 @@ export default {
         fadeIn: 'fadeIn 0.15s ease-out',
         slideIn: 'slideIn 0.22s cubic-bezier(.25,.8,.25,1)',
         alarmPulse: 'alarmPulse 1s ease-in-out infinite',
-        pulseFlash: 'pulseFlash 0.7s ease-out',
       }
     }
   },

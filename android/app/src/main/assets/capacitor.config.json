@@ -1,0 +1,14 @@
+{
+	"appId": "app.flow.tracker",
+	"appName": "Flow",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {
+		"LocalNotifications": {
+			"smallIcon": "ic_stat_flow",
+			"iconColor": "#c8f59a"
+		}
+	}
+}
