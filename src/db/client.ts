@@ -2,8 +2,8 @@
 // Runs in-browser: persists to localStorage (web dev) or syncs via IPC (Electron)
 // Schema mirrors SQLite exactly so the Electron → SQLite upgrade is a straight port
 
-import type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule } from './schema'
-export type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule }
+import type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule, DurationUnit, NotifyStyle, Priority, ShelfColor } from './schema'
+export type { Item, Shelf, Step, Note, FocusSession, ItemType, RepeatRule, DurationUnit, NotifyStyle, Priority, ShelfColor }
 
 // ── uid + time ────────────────────────────────────────────────────────────────
 export const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -166,6 +166,10 @@ export const itemsDB = {
       progress_current: null, progress_total: null, progress_unit: null,
       is_focus: 0, sort_order: maxOrder + 1,
       created_at: now(), updated_at: now(),
+      duration_value: null, duration_unit: null, started_at: null,
+      milestone_pcts: '[25,50,75]', milestones_fired: '[]',
+      notify_style: 'push', remind_before_min: null,
+      reminder_fired: 0, snoozed_until: null,
     }
     S.items.push(item)
     shelfIds.forEach(sid => S.item_shelves.push({ item_id: item.id, shelf_id: sid, added_at: now() }))
@@ -265,7 +269,62 @@ export const itemsDB = {
     })
     S.steps = S.steps.filter(s => s.item_id !== id)
     save(); return sh
-  }
+  },
+
+  // ── execution (duration tracking) ─────────────────────────────────────────
+  startExecution(id: string): void {
+    itemsDB.update(id, { started_at: now(), milestones_fired: '[]', reminder_fired: 0 })
+  },
+
+  resetExecution(id: string): void {
+    itemsDB.update(id, { started_at: null, milestones_fired: '[]' })
+  },
+
+  markMilestonesFired(id: string, pcts: number[]): void {
+    itemsDB.update(id, { milestones_fired: JSON.stringify(pcts) })
+  },
+
+  getInProgress(): Item[] {
+    return S.items.filter(i => !i.done && i.started_at && i.duration_value)
+  },
+
+  // ── reminders ────────────────────────────────────────────────────────────
+  getDueReminders(): Item[] {
+    const n = now()
+    return S.items.filter(i =>
+      !i.done && i.reminder_at && i.reminder_at <= n && !i.reminder_fired &&
+      (!i.snoozed_until || i.snoozed_until <= n)
+    )
+  },
+
+  getMissedReminders(graceMinutes = 15): Item[] {
+    const cutoff = new Date(Date.now() - graceMinutes * 60_000).toISOString()
+    return S.items.filter(i =>
+      !i.done && i.reminder_at && i.reminder_at <= cutoff &&
+      (!i.snoozed_until || i.snoozed_until <= now())
+    )
+  },
+
+  markReminderFired(id: string): void {
+    itemsDB.update(id, { reminder_fired: 1 })
+  },
+
+  snooze(id: string, minutes: number): void {
+    const until = new Date(Date.now() + minutes * 60_000).toISOString()
+    itemsDB.update(id, { snoozed_until: until, reminder_fired: 0 })
+  },
+
+  rescheduleToNext(id: string): void {
+    const it = itemsDB.getById(id); if (!it) return
+    const base = it.reminder_at ? new Date(it.reminder_at) : new Date()
+    const next = new Date(base)
+    next.setDate(next.getDate() + 1) // suggest same time tomorrow
+    itemsDB.update(id, { reminder_at: next.toISOString(), scheduled_at: next.toISOString(), reminder_fired: 0, snoozed_until: null })
+  },
+
+  dismissReminder(id: string): void {
+    itemsDB.update(id, { reminder_at: null, reminder_fired: 0, snoozed_until: null })
+  },
 }
 
 // ── shelves ───────────────────────────────────────────────────────────────────
@@ -283,7 +342,12 @@ export const shelvesDB = {
 
   create(name: string, icon = '📁', parentId: string | null = null): Shelf {
     const maxOrder = S.shelves.filter(s => s.parent_id === parentId).reduce((m, s) => Math.max(m, s.sort_order), -1)
-    const sh: Shelf = { id: uid(), name: name.trim(), icon, parent_id: parentId, sort_order: maxOrder + 1, created_at: now() }
+    const sh: Shelf = {
+      id: uid(), name: name.trim(), icon, parent_id: parentId, sort_order: maxOrder + 1, created_at: now(),
+      reminder_enabled: 0, reminder_time: null, reminder_days: '[]',
+      notify_style: 'push', color: 'accent', priority: 'medium',
+      total_duration_min: null, last_triggered_date: null,
+    }
     S.shelves.push(sh); save(); return sh
   },
 
@@ -308,7 +372,28 @@ export const shelvesDB = {
   isDescendant(checkId: string, ofId: string): boolean {
     if (checkId === ofId) return true
     return shelvesDB.getChildren(ofId).some(c => shelvesDB.isDescendant(checkId, c.id))
-  }
+  },
+
+  // ── shelf-level reminder engine ─────────────────────────────────────────────
+  getDueForTrigger(): Shelf[] {
+    const d = new Date()
+    const hhmm = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+    const today = d.toISOString().slice(0, 10)
+    const dow = d.getDay()
+    return S.shelves.filter(s => {
+      if (!s.reminder_enabled || !s.reminder_time) return false
+      if (s.reminder_time !== hhmm) return false
+      if (s.last_triggered_date === today) return false
+      let days: number[] = []
+      try { days = JSON.parse(s.reminder_days || '[]') } catch {}
+      if (days.length > 0 && !days.includes(dow)) return false
+      return shelvesDB.activeCount(s.id) > 0
+    })
+  },
+
+  markTriggered(id: string): void {
+    shelvesDB.update(id, { last_triggered_date: new Date().toISOString().slice(0, 10) })
+  },
 }
 
 // ── steps ─────────────────────────────────────────────────────────────────────
@@ -362,6 +447,12 @@ export const notesDB = {
 
 // ── focus sessions ────────────────────────────────────────────────────────────
 export const sessionsDB = {
+  getAll(): FocusSession[] { return S.focus_sessions },
+
+  getForItem(itemId: string): FocusSession[] {
+    return S.focus_sessions.filter(s => s.item_id === itemId)
+  },
+
   start(itemId: string | null): FocusSession {
     const s: FocusSession = { id: uid(), item_id: itemId, started_at: now(), ended_at: null, duration_seconds: null, completed: 0 }
     S.focus_sessions.push(s); save(); return s

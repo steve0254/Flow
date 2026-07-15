@@ -1,11 +1,12 @@
 import { useFlowStore } from '../store/useFlowStore'
 import ItemRow from '../components/ItemRow'
+import RemindersBanner from '../components/RemindersBanner'
 import { greeting, fmtTimer, ago } from '../lib/utils'
 import { itemsDB, shelvesDB } from '../db/client'
 import { TimerRing } from './FocusView'
 
 export default function HomeView() {
-  const { focus, queue, items, shelves, timer, startTimer, pauseTimer, stopTimer, markDone, setFocus, setScreen, openShelf, openDetail } = useFlowStore()
+  const { focus, queue, items, shelves, timer, startTimer, pauseTimer, stopTimer, markDone, setFocus, setScreen, openShelf, openDetail, missedReminders } = useFlowStore()
 
   const roots = shelves.filter(s => !s.parent_id).slice(0, 6)
   const todayItems = items.filter(i => !i.done && i.scheduled_at && isToday(i.scheduled_at))
@@ -26,6 +27,11 @@ export default function HomeView() {
             {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
         </div>
+
+        {/* Missed reminders */}
+        {missedReminders.length > 0 && (
+          <div className="mb-6"><RemindersBanner /></div>
+        )}
 
         {/* Current focus card */}
         <div className="bg-bg-2 border border-[rgba(242,239,234,.07)] rounded-xl p-5 mb-6">

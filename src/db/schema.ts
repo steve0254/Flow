@@ -2,9 +2,31 @@
 // Option C: junction table from day one, progress fields, JSON repeat rules
 // Migration-friendly: only ADD columns/tables, never remove
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export const MIGRATIONS: Record<number, string> = {
+  2: `
+    -- Execution model: duration + real-time progress
+    ALTER TABLE items ADD COLUMN duration_value     INTEGER;
+    ALTER TABLE items ADD COLUMN duration_unit      TEXT;      -- minutes|hours|days|weeks|months
+    ALTER TABLE items ADD COLUMN started_at         TEXT;
+    ALTER TABLE items ADD COLUMN milestone_pcts     TEXT NOT NULL DEFAULT '[25,50,75]';
+    ALTER TABLE items ADD COLUMN milestones_fired   TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE items ADD COLUMN notify_style       TEXT NOT NULL DEFAULT 'push'; -- sound|vibration|silent|push
+    ALTER TABLE items ADD COLUMN remind_before_min  INTEGER;
+    ALTER TABLE items ADD COLUMN reminder_fired     INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE items ADD COLUMN snoozed_until       TEXT;
+
+    -- Shelves become routines: reminder schedule + duration + theming
+    ALTER TABLE shelves ADD COLUMN reminder_enabled     INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE shelves ADD COLUMN reminder_time        TEXT;             -- "HH:MM"
+    ALTER TABLE shelves ADD COLUMN reminder_days        TEXT NOT NULL DEFAULT '[]'; -- [] = every day
+    ALTER TABLE shelves ADD COLUMN notify_style         TEXT NOT NULL DEFAULT 'push';
+    ALTER TABLE shelves ADD COLUMN color                TEXT NOT NULL DEFAULT 'accent';
+    ALTER TABLE shelves ADD COLUMN priority             TEXT NOT NULL DEFAULT 'medium'; -- low|medium|high
+    ALTER TABLE shelves ADD COLUMN total_duration_min   INTEGER;
+    ALTER TABLE shelves ADD COLUMN last_triggered_date  TEXT;
+  `,
   1: `
     CREATE TABLE IF NOT EXISTS meta (
       key   TEXT PRIMARY KEY,
@@ -114,6 +136,11 @@ export interface RepeatRule {
   unit?: 'days' | 'weeks' | 'months'  // for custom
 }
 
+export type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
+export type NotifyStyle  = 'sound' | 'vibration' | 'silent' | 'push'
+export type Priority     = 'low' | 'medium' | 'high'
+export type ShelfColor   = 'accent' | 'red' | 'blue' | 'gold' | 'purple'
+
 export interface Item {
   id:               string
   content:          string
@@ -134,6 +161,18 @@ export interface Item {
   sort_order:       number
   created_at:       string
   updated_at:       string
+
+  // Execution model
+  duration_value:    number | null
+  duration_unit:     DurationUnit | null
+  started_at:        string | null
+  milestone_pcts:    string          // JSON number[], e.g. "[25,50,75]"
+  milestones_fired:  string          // JSON number[] already notified
+  notify_style:      NotifyStyle
+  remind_before_min: number | null   // "N minutes left" reminder
+  reminder_fired:    number          // 0 | 1 — item.reminder_at notification already sent
+  snoozed_until:     string | null
+
   // Joined
   shelf_ids?:       string[]
   steps?:           Step[]
@@ -146,6 +185,16 @@ export interface Shelf {
   parent_id:  string | null
   sort_order: number
   created_at: string
+
+  // Routine / reminder config
+  reminder_enabled:    number          // 0 | 1
+  reminder_time:       string | null   // "HH:MM"
+  reminder_days:       string          // JSON number[] (0=Sun..6=Sat), [] = every day
+  notify_style:        NotifyStyle
+  color:                ShelfColor
+  priority:             Priority
+  total_duration_min:   number | null
+  last_triggered_date:  string | null  // "YYYY-MM-DD", prevents double-trigger same day
 }
 
 export interface Step {

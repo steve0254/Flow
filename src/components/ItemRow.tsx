@@ -1,6 +1,7 @@
 import { useFlowStore } from '../store/useFlowStore'
 import type { Item } from '../db/client'
 import { ago, fmtTime, typeColor } from '../lib/utils'
+import { getExecutionState, fmtDuration } from '../lib/execution'
 
 interface Props {
   item: Item
@@ -14,6 +15,8 @@ export default function ItemRow({ item, showShelfBadges, onFocus }: Props) {
   const shelfBadges = showShelfBadges
     ? shelves.filter(s => item.shelf_ids?.includes(s.id))
     : []
+
+  const exec = !item.done ? getExecutionState(item) : null
 
   return (
     <div
@@ -52,6 +55,12 @@ export default function ItemRow({ item, showShelfBadges, onFocus }: Props) {
             </span>
           )}
 
+          {exec && (
+            <span className={`text-[9px] font-mono ${exec.isOverdue ? 'text-[#e8654a]' : 'text-[#c8f59a]'}`}>
+              {exec.isOverdue ? 'overdue' : `${fmtDuration(exec.remainingMs)} left`}
+            </span>
+          )}
+
           {item.repeat_rule && (
             <span className="text-[9px] text-ink-3 font-mono">↻ {item.repeat_rule}</span>
           )}
@@ -64,6 +73,16 @@ export default function ItemRow({ item, showShelfBadges, onFocus }: Props) {
             </span>
           ))}
         </div>
+
+        {/* Execution progress bar */}
+        {exec && (
+          <div className="mt-1.5 h-px bg-bg-4 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all ${exec.isOverdue ? 'bg-[#e8654a]' : 'bg-[#c8f59a]'}`}
+              style={{ width: `${exec.pct}%` }}
+            />
+          </div>
+        )}
 
         {/* Steps progress bar */}
         {item.steps && item.steps.length > 0 && (

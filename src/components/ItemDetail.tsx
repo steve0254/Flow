@@ -3,13 +3,21 @@ import { useFlowStore } from '../store/useFlowStore'
 import { itemsDB, shelvesDB } from '../db/client'
 import type { Item, Step } from '../db/client'
 import { fmtTime, ICONS } from '../lib/utils'
+import { parseMilestones } from '../lib/execution'
+import DurationPicker from './DurationPicker'
+import ExecutionHUD from './ExecutionHUD'
+
+const NOTIFY_STYLES = ['push', 'sound', 'vibration', 'silent'] as const
+const DEFAULT_MILESTONES = [25, 50, 75]
 
 const TYPES = ['TASK','IDEA','PROJECT','REMINDER','NOTE','JOURNAL'] as const
 const STATUSES = ['raw','exploring','active','parked'] as const
 
 export default function ItemDetail() {
   const { detailItemId, closeDetail, shelves, updateItem, deleteItem, markDone,
-          loadSteps, addStep, toggleStep, deleteStep, steps, setFocus, promoteToProject, addToShelf, removeFromShelf } = useFlowStore()
+          loadSteps, addStep, toggleStep, deleteStep, steps, setFocus, promoteToProject, addToShelf, removeFromShelf,
+          startExecution, resetExecution } = useFlowStore()
+  const [customPct, setCustomPct] = useState('')
 
   const [item, setItem] = useState<Item | null>(null)
   const [content, setContent]   = useState('')
@@ -50,6 +58,20 @@ export default function ItemDetail() {
 
   function handleDelete() {
     if (confirm('Delete this item?')) deleteItem(item!.id)
+  }
+
+  function toggleMilestone(pct: number) {
+    const current = parseMilestones(item!.milestone_pcts)
+    const next = current.includes(pct) ? current.filter(p => p !== pct) : [...current, pct].sort((a,b) => a-b)
+    save('milestone_pcts', JSON.stringify(next))
+  }
+
+  function addCustomMilestone() {
+    const n = +customPct
+    if (!n || n <= 0 || n >= 100) return
+    const current = parseMilestones(item!.milestone_pcts)
+    if (!current.includes(n)) save('milestone_pcts', JSON.stringify([...current, n].sort((a,b) => a-b)))
+    setCustomPct('')
   }
 
   return (
@@ -155,6 +177,86 @@ export default function ItemDetail() {
             >
               + Add progress tracking
             </button>
+          )}
+
+          {/* Duration & execution */}
+          <div>
+            <p className="section-label">Duration</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <DurationPicker
+                value={item.duration_value}
+                unit={item.duration_unit}
+                onChange={(v, u) => { save('duration_value', v); save('duration_unit', u) }}
+              />
+              {item.duration_value && !item.started_at && !item.done && (
+                <button onClick={() => startExecution(item.id)} className="btn btn-accent">▶ Start execution</button>
+              )}
+              {item.started_at && (
+                <button onClick={() => resetExecution(item.id)} className="text-[9px] text-ink-3 hover:text-ink-2 underline underline-offset-2">
+                  Reset
+                </button>
+              )}
+            </div>
+
+            {item.started_at && item.duration_value && (
+              <div className="mt-4 bg-bg-3 rounded-xl p-4 border border-[rgba(242,239,234,.07)]">
+                <ExecutionHUD item={item} size={100} />
+              </div>
+            )}
+          </div>
+
+          {/* Progress notifications (only relevant once a duration is set) */}
+          {item.duration_value && (
+            <div>
+              <p className="section-label">Progress notifications</p>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[...new Set([...DEFAULT_MILESTONES, ...parseMilestones(item.milestone_pcts)])].sort((a,b) => a-b).map(pct => {
+                  const enabled = parseMilestones(item.milestone_pcts).includes(pct)
+                  return (
+                    <button key={pct} onClick={() => toggleMilestone(pct)}
+                      className={`text-[9px] font-mono px-2 py-1 rounded border transition-all
+                        ${enabled
+                          ? 'border-[rgba(200,245,154,.4)] text-[#c8f59a] bg-[rgba(200,245,154,.08)]'
+                          : 'border-[rgba(242,239,234,.08)] text-ink-3 hover:text-ink-2'}`}
+                    >{pct}%</button>
+                  )
+                })}
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number" min={1} max={99} value={customPct}
+                    onChange={e => setCustomPct(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addCustomMilestone() }}
+                    placeholder="custom"
+                    className="w-14 bg-bg-4 rounded px-1.5 py-1 text-[9px] text-ink-1 outline-none border border-[rgba(242,239,234,.08)] nodrag"
+                    style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                  />
+                  <button onClick={addCustomMilestone} className="text-[9px] text-ink-3 hover:text-[#c8f59a]">+</button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-ink-3">Also remind me with</span>
+                <input
+                  type="number" min={1} value={item.remind_before_min ?? ''}
+                  onChange={e => save('remind_before_min', e.target.value ? +e.target.value : null)}
+                  placeholder="—"
+                  className="w-14 bg-bg-4 rounded px-2 py-1 text-xs text-ink-1 outline-none border border-[rgba(242,239,234,.08)] text-center nodrag"
+                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                />
+                <span className="text-xs text-ink-3">min left</span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {NOTIFY_STYLES.map(s => (
+                  <button key={s} onClick={() => save('notify_style', s)}
+                    className={`text-[8px] tracking-widest uppercase font-mono px-2 py-0.5 rounded cursor-pointer border transition-all
+                      ${item.notify_style === s
+                        ? 'border-[rgba(200,245,154,.4)] text-[#c8f59a] bg-[rgba(200,245,154,.08)]'
+                        : 'border-[rgba(242,239,234,.08)] text-ink-3 hover:text-ink-2'}`}
+                  >{s}</button>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Reminder */}

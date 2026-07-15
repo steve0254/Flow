@@ -121,8 +121,15 @@ function setupIPC() {
     companionWindow?.webContents.send('db:refresh')
   })
 
-  ipcMain.on('notify', (_e, { title, body }) => {
-    new Notification({ title, body, silent: false }).show()
+  ipcMain.on('notify', (_e, { title, body, style }) => {
+    // Desktop has no vibration motor: map 'vibration' to a silent OS banner
+    // plus an in-app pulse event the renderer can animate instead.
+    const silent = style === 'silent' || style === 'vibration'
+    new Notification({ title, body, silent }).show()
+    if (style === 'vibration') {
+      mainWindow?.webContents.send('flow:pulse')
+      companionWindow?.webContents.send('flow:pulse')
+    }
   })
 
   ipcMain.on('open:external', (_e, url) => shell.openExternal(url))

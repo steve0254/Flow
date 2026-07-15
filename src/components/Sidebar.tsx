@@ -4,11 +4,12 @@ import { shelvesDB } from '../db/client'
 import { fmtTimer } from '../lib/utils'
 
 const NAV: { id: Screen; label: string; icon: string }[] = [
-  { id: 'home',    label: 'Home',    icon: '⌂' },
-  { id: 'inbox',   label: 'Inbox',   icon: '◉' },
-  { id: 'focus',   label: 'Focus',   icon: '◎' },
-  { id: 'shelves', label: 'Shelves', icon: '▤' },
-  { id: 'notes',   label: 'Notes',   icon: '✎' },
+  { id: 'home',      label: 'Home',      icon: '⌂' },
+  { id: 'inbox',     label: 'Inbox',     icon: '◉' },
+  { id: 'focus',     label: 'Focus',     icon: '◎' },
+  { id: 'shelves',   label: 'Shelves',   icon: '▤' },
+  { id: 'notes',     label: 'Notes',     icon: '✎' },
+  { id: 'analytics', label: 'Analytics', icon: '◈' },
 ]
 
 export default function Sidebar() {

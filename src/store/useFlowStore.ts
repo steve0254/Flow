@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { itemsDB, shelvesDB, stepsDB, notesDB, sessionsDB, prefsDB, reloadStore, seedIfEmpty, classify } from '../db/client'
 import type { Item, Shelf, Step, Note, ItemType } from '../db/client'
+import { getExecutionState, getCrossedMilestones, milestoneMessage, shouldRemindTimeLeft } from '../lib/execution'
+import { notify } from '../lib/notify'
 
-export type Screen = 'home' | 'inbox' | 'shelves' | 'focus' | 'notes'
+export type Screen = 'home' | 'inbox' | 'shelves' | 'focus' | 'notes' | 'analytics'
 
 interface Timer {
   running:    boolean
@@ -65,8 +67,30 @@ interface FlowStore {
   // focus shelf sequence
   focusShelfId: string | null
   focusShelfQueue: Item[]
+  shelfFocusStartedAt: number | null
+  shelfFocusPaused: boolean
   startShelfFocus: (shelfId: string) => void
   advanceShelfFocus: () => void
+  skipShelfFocus: () => void
+  pauseShelfFocus: () => void
+  resumeShelfFocus: () => void
+  reorderShelfQueue: (ids: string[]) => void
+  exitShelfFocus: () => void
+
+  // execution (duration tracking)
+  startExecution: (id: string) => void
+  resetExecution: (id: string) => void
+
+  // reminder engine
+  dueReminders:    Item[]
+  missedReminders: Item[]
+  checkReminders:  () => void
+  snoozeItem:      (id: string, minutes: number) => void
+  rescheduleItem:  (id: string) => void
+  dismissReminderItem: (id: string) => void
+
+  // shelves (routine settings)
+  updateShelf: (id: string, updates: Partial<Shelf>) => void
 
   // resurface
   surfaced:     Item | null
@@ -231,14 +255,14 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     set(s => ({ timer: { ...s.timer, running: false, elapsed: 0, sessionId: null, intervalId: null } }))
   },
 
-  // ── shelf sequence ─────────────────────────────────────────────────────────
-  focusShelfId: null, focusShelfQueue: [],
+  // ── shelf sequence (Shelf Focus Mode) ────────────────────────────────────────
+  focusShelfId: null, focusShelfQueue: [], shelfFocusStartedAt: null, shelfFocusPaused: false,
 
   startShelfFocus(shelfId) {
     const all = itemsDB.getForShelf(shelfId).filter(i => !i.done)
     if (!all.length) return
     itemsDB.setFocus(all[0].id)
-    set({ focusShelfId: shelfId, focusShelfQueue: all, screen: 'focus' })
+    set({ focusShelfId: shelfId, focusShelfQueue: all, screen: 'focus', shelfFocusStartedAt: Date.now(), shelfFocusPaused: false })
     get().load()
   },
 
@@ -251,10 +275,94 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       set({ focusShelfQueue: next })
     } else {
       itemsDB.setFocus(null)
-      set({ focusShelfId: null, focusShelfQueue: [] })
+      set({ focusShelfId: null, focusShelfQueue: [], shelfFocusStartedAt: null })
     }
     get().load()
   },
+
+  skipShelfFocus() {
+    // Move current item to the back of the queue without marking it done
+    const { focusShelfQueue, focus } = get()
+    if (!focus || focusShelfQueue.length < 2) return
+    const rest = focusShelfQueue.filter(i => i.id !== focus.id)
+    const reordered = [...rest, focus]
+    itemsDB.reorder(reordered.map(i => i.id))
+    itemsDB.setFocus(rest[0].id)
+    set({ focusShelfQueue: reordered })
+    get().load()
+  },
+
+  pauseShelfFocus() {
+    const { timer } = get()
+    if (timer.running) get().pauseTimer()
+    set({ shelfFocusPaused: true })
+  },
+
+  resumeShelfFocus() { set({ shelfFocusPaused: false }) },
+
+  reorderShelfQueue(ids) {
+    itemsDB.reorder(ids)
+    const { focusShelfId } = get()
+    if (focusShelfId) {
+      const next = itemsDB.getForShelf(focusShelfId).filter(i => !i.done)
+      set({ focusShelfQueue: next })
+    }
+  },
+
+  exitShelfFocus() {
+    set({ focusShelfId: null, focusShelfQueue: [], shelfFocusStartedAt: null, shelfFocusPaused: false })
+  },
+
+  // ── execution (duration tracking) ────────────────────────────────────────────
+  startExecution(id) { itemsDB.startExecution(id); get().load() },
+  resetExecution(id) { itemsDB.resetExecution(id); get().load() },
+
+  // ── shelves (routine settings) ───────────────────────────────────────────────
+  updateShelf(id, updates) { shelvesDB.update(id, updates); get().load() },
+
+  // ── reminder engine ───────────────────────────────────────────────────────────
+  dueReminders: [], missedReminders: [],
+
+  checkReminders() {
+    // 1. Milestone + time's-up notifications for in-progress timed items
+    itemsDB.getInProgress().forEach(item => {
+      const state = getExecutionState(item)
+      if (!state) return
+      const crossed = getCrossedMilestones(item, state.pct)
+      if (crossed.length) {
+        crossed.forEach(pct => notify('Flow', milestoneMessage(item, pct), item.notify_style))
+        const fired = [...new Set([...JSON.parse(item.milestones_fired || '[]'), ...crossed])]
+        itemsDB.markMilestonesFired(item.id, fired)
+      }
+      if (shouldRemindTimeLeft(item, state)) {
+        notify('Flow', `${item.content}: ${Math.round(state.remainingMs / 60_000)} min left`, item.notify_style)
+        itemsDB.update(item.id, { remind_before_min: null }) // fire once
+      }
+    })
+
+    // 2. Due item reminders
+    itemsDB.getDueReminders().forEach(item => {
+      notify('Flow', `Reminder: ${item.content}`, item.notify_style)
+      itemsDB.markReminderFired(item.id)
+    })
+
+    // 3. Shelf routine triggers → enter Shelf Focus Mode automatically
+    shelvesDB.getDueForTrigger().forEach(shelf => {
+      shelvesDB.markTriggered(shelf.id)
+      notify(shelf.icon + ' ' + shelf.name, 'Time to start your routine', shelf.notify_style)
+      get().startShelfFocus(shelf.id)
+    })
+
+    set({
+      dueReminders: itemsDB.getDueReminders(),
+      missedReminders: itemsDB.getMissedReminders(),
+    })
+    get().load()
+  },
+
+  snoozeItem(id, minutes) { itemsDB.snooze(id, minutes); get().checkReminders() },
+  rescheduleItem(id) { itemsDB.rescheduleToNext(id); get().checkReminders() },
+  dismissReminderItem(id) { itemsDB.dismissReminder(id); get().checkReminders() },
 
   // ── resurface ─────────────────────────────────────────────────────────────
   surfaced: null,

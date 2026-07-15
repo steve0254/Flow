@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useFlowStore } from '../store/useFlowStore'
 import { itemsDB, shelvesDB } from '../db/client'
 import ItemRow from '../components/ItemRow'
+import ShelfRoutineSettings from '../components/ShelfRoutineSettings'
 import { ICONS } from '../lib/utils'
 
 export default function ShelvesView() {
@@ -166,6 +167,28 @@ export default function ShelvesView() {
               </div>
             </div>
 
+            {/* Shelf progress summary */}
+            {(() => {
+              const all = itemsDB.getForShelf(shelf.id)
+              if (all.length === 0) return null
+              const doneCount = all.filter(i => i.done).length
+              const pct = Math.round((doneCount / all.length) * 100)
+              return (
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[9px] text-ink-3 font-mono">
+                      {doneCount}/{all.length} complete
+                      {shelf.total_duration_min && ` · ${shelf.total_duration_min} min total`}
+                    </span>
+                    <span className="text-[9px] text-ink-3 font-mono">{pct}%</span>
+                  </div>
+                  <div className="h-1 bg-bg-4 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#c8f59a] transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Sub-shelves */}
             {children.length > 0 && (
               <div className="mb-5">
@@ -182,6 +205,9 @@ export default function ShelvesView() {
                 </div>
               </div>
             )}
+
+            {/* Routine settings */}
+            <ShelfRoutineSettings shelf={shelf} />
 
             {/* Filter */}
             <div className="flex items-center gap-2 mb-4">

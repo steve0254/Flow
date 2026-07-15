@@ -1,6 +1,9 @@
 import { useFlowStore } from '../store/useFlowStore'
 import { fmtTimer, fmtElapsed, ago } from '../lib/utils'
+import { itemsDB } from '../db/client'
 import ItemRow from '../components/ItemRow'
+import ShelfFocusHUD from '../components/ShelfFocusHUD'
+import ExecutionHUD from '../components/ExecutionHUD'
 
 // Exported so HomeView can use it
 export function TimerRing({ elapsed, duration, size = 120, running = false }: {
@@ -30,9 +33,13 @@ export default function FocusView() {
   const {
     focus, queue, timer, setFocus, markDone,
     startTimer, pauseTimer, stopTimer,
-    focusShelfId, focusShelfQueue, advanceShelfFocus,
+    focusShelfId, focusShelfQueue, shelves,
+    shelfFocusStartedAt, shelfFocusPaused,
     steps, loadSteps, toggleStep, openDetail,
   } = useFlowStore()
+
+  const activeShelf = focusShelfId ? shelves.find(s => s.id === focusShelfId) : null
+  const shelfTotalCount = focusShelfId ? itemsDB.getForShelf(focusShelfId).length : 0
 
   const focusSteps = focus ? (steps[focus.id] ?? []) : []
   const hasTimer = timer.elapsed > 0 || timer.running
@@ -46,14 +53,15 @@ export default function FocusView() {
         {focus ? (
           <div className="w-full max-w-lg space-y-8">
 
-            {/* Shelf sequence badge */}
-            {focusShelfId && (
-              <div className="flex items-center gap-2 justify-center">
-                <span className="text-[9px] font-mono text-ink-3 uppercase tracking-widest">Running sequence</span>
-                <span className="text-[9px] text-ink-3 font-mono">
-                  {focusShelfQueue.filter(i => !i.done).length} remaining
-                </span>
-              </div>
+            {/* Shelf routine HUD */}
+            {activeShelf && (
+              <ShelfFocusHUD
+                shelf={activeShelf}
+                queue={focusShelfQueue.filter(i => !i.done)}
+                totalCount={shelfTotalCount}
+                startedAt={shelfFocusStartedAt}
+                paused={shelfFocusPaused}
+              />
             )}
 
             {/* Timer ring + focus text */}
@@ -87,7 +95,25 @@ export default function FocusView() {
               </div>
             </div>
 
+            {/* Execution HUD (item has its own duration + started_at) */}
+            {focus.duration_value && focus.started_at && (
+              <div className="flex justify-center">
+                <ExecutionHUD item={focus} size={90} />
+              </div>
+            )}
+
             {/* Timer controls */}
+            {activeShelf && shelfFocusPaused ? (
+              <div className="text-center">
+                <p className="text-[9px] text-ink-3 uppercase tracking-widest mb-2">Routine paused</p>
+                <button
+                  onClick={() => markDone(focus.id)}
+                  className="btn btn-ghost border-[rgba(200,245,154,.2)] text-[#c8f59a] hover:bg-[rgba(200,245,154,.06)]"
+                >
+                  Done ✓
+                </button>
+              </div>
+            ) : (
             <div className="flex items-center justify-center gap-3">
               {!timer.running ? (
                 <button onClick={startTimer} className="btn btn-accent px-6 py-2.5 text-sm">
@@ -108,6 +134,7 @@ export default function FocusView() {
                 Done ✓
               </button>
             </div>
+            )}
 
             {/* Steps */}
             {focusSteps.length > 0 && (
@@ -142,16 +169,11 @@ export default function FocusView() {
               </div>
             )}
 
-            {/* Skip / clear focus */}
+            {/* Clear focus */}
             <div className="flex items-center justify-center gap-4">
               <button onClick={() => setFocus(null)} className="text-[9px] text-ink-3 hover:text-ink-2 transition-colors">
                 Clear focus
               </button>
-              {focusShelfId && (
-                <button onClick={advanceShelfFocus} className="text-[9px] text-ink-3 hover:text-[#c8f59a] transition-colors">
-                  → Next in sequence
-                </button>
-              )}
             </div>
           </div>
         ) : (
